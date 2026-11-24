@@ -1,0 +1,581 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // PRIMITIVE HELPERS
+    // =========================================================================
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidToken(token) {
+      return token is string && token.size() >= 32 && token.size() <= 128 && token.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isBootstrapAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'ahmadmahbubi@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true
+      );
+    }
+
+    // =========================================================================
+    // VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    // =========================================================================
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'role', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'name', 'role', 'active', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && isValidString(data.email, 5, 160)
+        && isValidString(data.name, 1, 120)
+        && data.role in ['super_admin', 'admin']
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProgram(data) {
+      return data.keys().hasAll([
+          'id', 'slug', 'name', 'batchLabel', 'description', 'dateLabel',
+          'startDateIso', 'endDateIso', 'durationLabel', 'location',
+          'price', 'quota', 'confirmedCount', 'reservedCount', 'waitlistCount',
+          'registrationSeq', 'reservationHours', 'projectCount', 'targetRevenue',
+          'status', 'isFeatured', 'facilities', 'curriculum', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'slug', 'name', 'batchLabel', 'description', 'dateLabel',
+          'startDateIso', 'endDateIso', 'durationLabel', 'location',
+          'price', 'quota', 'confirmedCount', 'reservedCount', 'waitlistCount',
+          'registrationSeq', 'reservationHours', 'projectCount', 'targetRevenue',
+          'status', 'isFeatured', 'facilities', 'curriculum', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidString(data.slug, 3, 100)
+        && isValidString(data.name, 3, 180)
+        && isValidString(data.batchLabel, 2, 80)
+        && isValidString(data.description, 10, 2000)
+        && isValidString(data.dateLabel, 3, 100)
+        && isValidString(data.startDateIso, 10, 40)
+        && isValidString(data.endDateIso, 10, 40)
+        && isValidString(data.durationLabel, 2, 60)
+        && isValidString(data.location, 3, 200)
+        && data.price is number && data.price >= 0 && data.price <= 500000000
+        && data.quota is number && data.quota >= 1 && data.quota <= 5000
+        && data.confirmedCount is number && data.confirmedCount >= 0 && data.confirmedCount <= data.quota
+        && data.reservedCount is number && data.reservedCount >= 0 && data.reservedCount <= data.quota
+        && data.waitlistCount is number && data.waitlistCount >= 0 && data.waitlistCount <= 10000
+        && data.registrationSeq is number && data.registrationSeq >= 0 && data.registrationSeq <= 999999
+        && data.reservationHours is number && data.reservationHours >= 1 && data.reservationHours <= 720
+        && data.projectCount is number && data.projectCount >= 1 && data.projectCount <= 100
+        && data.targetRevenue is number && data.targetRevenue >= 0
+        && data.status in ['open', 'closed', 'archived']
+        && data.isFeatured is bool
+        && data.facilities is list && data.facilities.size() <= 30
+        && (data.facilities.size() == 0 || data.facilities[0] is string)
+        && data.curriculum is list && data.curriculum.size() <= 30
+        && (data.curriculum.size() == 0 || data.curriculum[0] is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRegistration(data) {
+      return data.keys().hasAll([
+          'id', 'registrationNumber', 'accessToken', 'programId', 'programName',
+          'fullName', 'gender', 'whatsapp', 'email', 'institution', 'position',
+          'city', 'province', 'aiExperience', 'expectations',
+          'registrationStatus', 'paymentStatus', 'amount', 'rejectionReason',
+          'reservationExpiresAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'registrationNumber', 'accessToken', 'programId', 'programName',
+          'fullName', 'gender', 'whatsapp', 'email', 'institution', 'position',
+          'city', 'province', 'aiExperience', 'expectations',
+          'registrationStatus', 'paymentStatus', 'amount', 'rejectionReason',
+          'reservationExpiresAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 16
+        && isValidString(data.registrationNumber, 8, 40) && data.registrationNumber.matches('^SAKITA-[0-9]{4}-[0-9]{4,6}$')
+        && isValidToken(data.accessToken)
+        && isValidId(data.programId)
+        && isValidString(data.programName, 3, 180)
+        && isValidString(data.fullName, 2, 140)
+        && data.gender in ['Laki-laki', 'Perempuan']
+        && isValidString(data.whatsapp, 10, 20) && data.whatsapp.matches('^62[0-9]{8,15}$')
+        && isValidString(data.email, 5, 160)
+        && isValidString(data.institution, 2, 180)
+        && isValidString(data.position, 2, 120)
+        && isValidString(data.city, 2, 100)
+        && isValidString(data.province, 2, 100)
+        && isValidString(data.aiExperience, 0, 1000)
+        && isValidString(data.expectations, 0, 1000)
+        && data.registrationStatus in ['pending_payment', 'active', 'waitlist', 'cancelled', 'expired']
+        && data.paymentStatus in ['belum_unggah', 'menunggu_verifikasi', 'lunas', 'ditolak', 'minta_bukti_ulang', 'daftar_tunggu']
+        && data.amount is number && data.amount >= 0 && data.amount <= 500000000
+        && isValidString(data.rejectionReason, 0, 500)
+        && isValidString(data.reservationExpiresAt, 0, 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRegistrationTicket(data) {
+      return data.keys().hasAll([
+          'accessToken', 'registrationId', 'registrationNumber', 'programId',
+          'programName', 'programDates', 'programLocation', 'fullName',
+          'institution', 'amount', 'registrationStatus', 'paymentStatus',
+          'rejectionReason', 'reservationExpiresAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accessToken', 'registrationId', 'registrationNumber', 'programId',
+          'programName', 'programDates', 'programLocation', 'fullName',
+          'institution', 'amount', 'registrationStatus', 'paymentStatus',
+          'rejectionReason', 'reservationExpiresAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidToken(data.accessToken)
+        && isValidId(data.registrationId) && data.registrationId.size() >= 16
+        && isValidString(data.registrationNumber, 8, 40) && data.registrationNumber.matches('^SAKITA-[0-9]{4}-[0-9]{4,6}$')
+        && isValidId(data.programId)
+        && isValidString(data.programName, 3, 180)
+        && isValidString(data.programDates, 3, 100)
+        && isValidString(data.programLocation, 3, 200)
+        && isValidString(data.fullName, 2, 140)
+        && isValidString(data.institution, 2, 180)
+        && data.amount is number && data.amount >= 0 && data.amount <= 500000000
+        && data.registrationStatus in ['pending_payment', 'active', 'waitlist', 'cancelled', 'expired']
+        && data.paymentStatus in ['belum_unggah', 'menunggu_verifikasi', 'lunas', 'ditolak', 'minta_bukti_ulang', 'daftar_tunggu']
+        && isValidString(data.rejectionReason, 0, 500)
+        && isValidString(data.reservationExpiresAt, 0, 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll([
+          'id', 'registrationId', 'registrationNumber', 'accessToken', 'programId',
+          'senderName', 'senderBank', 'transferDate', 'transferAmount',
+          'proofFilePath', 'proofFileName', 'proofMimeType',
+          'verificationStatus', 'verifiedBy', 'verifiedAt', 'rejectionReason',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'registrationId', 'registrationNumber', 'accessToken', 'programId',
+          'senderName', 'senderBank', 'transferDate', 'transferAmount',
+          'proofFilePath', 'proofFileName', 'proofMimeType',
+          'verificationStatus', 'verifiedBy', 'verifiedAt', 'rejectionReason',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 16
+        && isValidId(data.registrationId) && data.registrationId.size() >= 16
+        && isValidString(data.registrationNumber, 8, 40) && data.registrationNumber.matches('^SAKITA-[0-9]{4}-[0-9]{4,6}$')
+        && isValidToken(data.accessToken)
+        && isValidId(data.programId)
+        && isValidString(data.senderName, 2, 140)
+        && isValidString(data.senderBank, 2, 100)
+        && isValidString(data.transferDate, 8, 30)
+        && data.transferAmount is number && data.transferAmount > 0 && data.transferAmount <= 500000000
+        && isValidString(data.proofFilePath, 5, 500)
+        && isValidString(data.proofFileName, 1, 200)
+        && data.proofMimeType in ['image/jpeg', 'image/png', 'application/pdf']
+        && data.verificationStatus in ['menunggu_verifikasi', 'lunas', 'ditolak', 'minta_bukti_ulang']
+        && isValidString(data.verifiedBy, 0, 160)
+        && isValidString(data.verifiedAt, 0, 40)
+        && isValidString(data.rejectionReason, 0, 500)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWebsiteSettings(data) {
+      return data.keys().hasAll([
+          'brandName', 'brandSubtitle', 'tagline', 'logoUrl',
+          'heroEyebrow', 'heroHeadline', 'heroSubheadline', 'heroDescription',
+          'bannerUrl', 'whatsappNumber', 'contactEmail', 'privacyPolicy',
+          'termsConditions', 'mentor', 'hotelGallery', 'projects', 'facilities', 'faqs', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'brandName', 'brandSubtitle', 'tagline', 'logoUrl',
+          'heroEyebrow', 'heroHeadline', 'heroSubheadline', 'heroDescription',
+          'bannerUrl', 'whatsappNumber', 'contactEmail', 'privacyPolicy',
+          'termsConditions', 'mentor', 'hotelGallery', 'projects', 'facilities', 'faqs', 'updatedAt'
+        ])
+        && isValidString(data.brandName, 1, 80)
+        && isValidString(data.brandSubtitle, 0, 120)
+        && isValidString(data.tagline, 1, 180)
+        && isValidString(data.logoUrl, 0, 500)
+        && isValidString(data.heroEyebrow, 0, 100)
+        && isValidString(data.heroHeadline, 1, 240)
+        && isValidString(data.heroSubheadline, 0, 300)
+        && isValidString(data.heroDescription, 0, 1500)
+        && isValidString(data.bannerUrl, 0, 500)
+        && isValidString(data.whatsappNumber, 0, 30)
+        && isValidString(data.contactEmail, 0, 160)
+        && isValidString(data.privacyPolicy, 0, 12000)
+        && isValidString(data.termsConditions, 0, 12000)
+        && data.mentor is map
+        && data.hotelGallery is list && data.hotelGallery.size() <= 20
+        && (data.hotelGallery.size() == 0 || data.hotelGallery[0] is map)
+        && data.projects is list && data.projects.size() <= 30
+        && (data.projects.size() == 0 || data.projects[0] is map)
+        && data.facilities is list && data.facilities.size() <= 30
+        && (data.facilities.size() == 0 || data.facilities[0] is string)
+        && data.faqs is list && data.faqs.size() <= 30
+        && (data.faqs.size() == 0 || data.faqs[0] is map)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBankSettings(data) {
+      return data.keys().hasAll(['isConfigured', 'bankName', 'accountNumber', 'accountHolder', 'transferInstructions', 'updatedAt'])
+        && data.keys().hasOnly(['isConfigured', 'bankName', 'accountNumber', 'accountHolder', 'transferInstructions', 'updatedAt'])
+        && data.isConfigured is bool
+        && isValidString(data.bankName, 0, 100)
+        && isValidString(data.accountNumber, 0, 60)
+        && isValidString(data.accountHolder, 0, 140)
+        && isValidString(data.transferInstructions, 0, 2000)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCommunitySettings(data) {
+      return data.keys().hasAll(['communityName', 'whatsappInviteUrl', 'description', 'isActive', 'updatedAt'])
+        && data.keys().hasOnly(['communityName', 'whatsappInviteUrl', 'description', 'isActive', 'updatedAt'])
+        && isValidString(data.communityName, 0, 140)
+        && isValidString(data.whatsappInviteUrl, 0, 500)
+        && isValidString(data.description, 0, 1000)
+        && data.isActive is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotificationSettings(data) {
+      return data.keys().hasAll([
+          'adminEmail', 'adminWhatsapp', 'participantEmailSubject', 'participantEmailTemplate',
+          'adminEmailSubject', 'adminEmailTemplate', 'adminWhatsappTemplate',
+          'verifiedEmailSubject', 'verifiedEmailTemplate', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'adminEmail', 'adminWhatsapp', 'participantEmailSubject', 'participantEmailTemplate',
+          'adminEmailSubject', 'adminEmailTemplate', 'adminWhatsappTemplate',
+          'verifiedEmailSubject', 'verifiedEmailTemplate', 'updatedAt'
+        ])
+        && isValidString(data.adminEmail, 0, 160)
+        && isValidString(data.adminWhatsapp, 0, 30)
+        && isValidString(data.participantEmailSubject, 0, 200)
+        && isValidString(data.participantEmailTemplate, 0, 4000)
+        && isValidString(data.adminEmailSubject, 0, 200)
+        && isValidString(data.adminEmailTemplate, 0, 4000)
+        && isValidString(data.adminWhatsappTemplate, 0, 2000)
+        && isValidString(data.verifiedEmailSubject, 0, 200)
+        && isValidString(data.verifiedEmailTemplate, 0, 4000)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotificationLog(data) {
+      return data.keys().hasAll([
+          'id', 'eventKey', 'channel', 'recipient', 'subject', 'registrationNumber',
+          'status', 'attempts', 'errorMessage', 'payloadSummary', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'eventKey', 'channel', 'recipient', 'subject', 'registrationNumber',
+          'status', 'attempts', 'errorMessage', 'payloadSummary', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 10
+        && isValidString(data.eventKey, 4, 140)
+        && data.channel in ['email_participant', 'email_admin', 'whatsapp_admin', 'email_verified']
+        && isValidString(data.recipient, 3, 180)
+        && isValidString(data.subject, 0, 200)
+        && isValidString(data.registrationNumber, 0, 40)
+        && data.status in ['sent', 'failed', 'unconfigured', 'queued']
+        && data.attempts is number && data.attempts >= 0 && data.attempts <= 20
+        && isValidString(data.errorMessage, 0, 500)
+        && isValidString(data.payloadSummary, 0, 1000)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'adminUid', 'adminEmail', 'action', 'targetType', 'targetId', 'details', 'createdAt'])
+        && data.keys().hasOnly(['id', 'adminUid', 'adminEmail', 'action', 'targetType', 'targetId', 'details', 'createdAt'])
+        && isValidId(data.id) && data.id.size() >= 10
+        && isValidId(data.adminUid)
+        && isValidString(data.adminEmail, 5, 160)
+        && isValidString(data.action, 2, 100)
+        && isValidString(data.targetType, 2, 60)
+        && isValidString(data.targetId, 1, 140)
+        && isValidString(data.details, 0, 1200)
+        && data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // COLLECTION RULES
+    // =========================================================================
+
+    // 1. Admins (RBAC Registry)
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && (isAdmin() || (isVerifiedUser() && request.auth.uid == uid));
+      allow list: if isAdmin();
+      allow create: if isValidId(uid)
+        && isAdmin()
+        && isValidAdmin(incoming())
+        && incoming().uid == uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(uid)
+        && isAdmin()
+        && isValidAdmin(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'active', 'updatedAt']);
+      allow delete: if isValidId(uid) && isBootstrapAdmin() && uid != request.auth.uid;
+    }
+
+    // 2. Programs (Public read for open/featured catalog, Admin full control, Atomic public sequence/seat hold)
+    match /programs/{programId} {
+      allow get: if isValidId(programId);
+      allow list: if resource.data.status in ['open', 'closed', 'archived'];
+      allow create: if isValidId(programId)
+        && isAdmin()
+        && isValidProgram(incoming())
+        && incoming().id == programId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(programId)
+        && isValidProgram(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            // Action: Public Registration Sequence Increment (+1) & optional waitlist increment (+1)
+            existing().status == 'open'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['registrationSeq', 'waitlistCount', 'updatedAt'])
+            && incoming().registrationSeq == existing().registrationSeq + 1
+            && incoming().waitlistCount >= existing().waitlistCount
+            && incoming().waitlistCount <= existing().waitlistCount + 1
+          )
+          || (
+            // Action: Public Seat Hold on Transfer Proof Upload (+1, strictly bounded by quota)
+            existing().status == 'open'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['reservedCount', 'updatedAt'])
+            && incoming().reservedCount == existing().reservedCount + 1
+            && (existing().confirmedCount + incoming().reservedCount) <= existing().quota
+          )
+        );
+      allow delete: if isValidId(programId) && isAdmin();
+    }
+
+    // 3. Registrations (Strict PII Isolation - Admin only for read/list/delete)
+    match /registrations/{registrationId} {
+      allow get: if isValidId(registrationId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(registrationId)
+        && isValidRegistration(incoming())
+        && incoming().id == registrationId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().rejectionReason == ''
+        && (
+          (incoming().registrationStatus == 'pending_payment' && incoming().paymentStatus == 'belum_unggah')
+          || (incoming().registrationStatus == 'waitlist' && incoming().paymentStatus == 'daftar_tunggu')
+        )
+        && exists(/databases/$(database)/documents/programs/$(incoming().programId));
+      allow update: if isValidId(registrationId)
+        && isValidRegistration(incoming())
+        && incoming().id == existing().id
+        && incoming().registrationNumber == existing().registrationNumber
+        && incoming().accessToken == existing().accessToken
+        && incoming().programId == existing().programId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            // Action: Participant submits transfer proof (cannot bypass to 'lunas', cannot overwrite terminal states)
+            existing().paymentStatus in ['belum_unggah', 'minta_bukti_ulang', 'ditolak']
+            && existing().registrationStatus != 'cancelled'
+            && incoming().paymentStatus == 'menunggu_verifikasi'
+            && incoming().registrationStatus == 'active'
+            && incoming().rejectionReason == ''
+            && incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'registrationStatus', 'reservationExpiresAt', 'rejectionReason', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(registrationId) && isAdmin();
+    }
+
+    // 4. Registration Tickets (Token-gated status access for participants, never listable by public)
+    match /registration_tickets/{accessToken} {
+      allow get: if isValidToken(accessToken);
+      allow list: if isAdmin();
+      allow create: if isValidToken(accessToken)
+        && isValidRegistrationTicket(incoming())
+        && incoming().accessToken == accessToken
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().rejectionReason == ''
+        && (
+          (incoming().registrationStatus == 'pending_payment' && incoming().paymentStatus == 'belum_unggah')
+          || (incoming().registrationStatus == 'waitlist' && incoming().paymentStatus == 'daftar_tunggu')
+        )
+        && exists(/databases/$(database)/documents/programs/$(incoming().programId));
+      allow update: if isValidToken(accessToken)
+        && isValidRegistrationTicket(incoming())
+        && incoming().accessToken == existing().accessToken
+        && incoming().registrationId == existing().registrationId
+        && incoming().registrationNumber == existing().registrationNumber
+        && incoming().programId == existing().programId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            // Action: Sync ticket status on transfer proof submission
+            existing().paymentStatus in ['belum_unggah', 'minta_bukti_ulang', 'ditolak']
+            && existing().registrationStatus != 'cancelled'
+            && incoming().paymentStatus == 'menunggu_verifikasi'
+            && incoming().registrationStatus == 'active'
+            && incoming().rejectionReason == ''
+            && incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'registrationStatus', 'reservationExpiresAt', 'rejectionReason', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidToken(accessToken) && isAdmin();
+    }
+
+    // 5. Payments (Transfer proofs & verification records - strictly private to Admin)
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(paymentId)
+        && isValidPayment(incoming())
+        && incoming().id == paymentId
+        && incoming().verificationStatus == 'menunggu_verifikasi'
+        && incoming().verifiedBy == ''
+        && incoming().verifiedAt == ''
+        && incoming().rejectionReason == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/registrations/$(incoming().registrationId));
+      allow update: if isValidId(paymentId)
+        && isAdmin()
+        && isValidPayment(incoming())
+        && incoming().id == existing().id
+        && incoming().registrationId == existing().registrationId
+        && incoming().registrationNumber == existing().registrationNumber
+        && incoming().accessToken == existing().accessToken
+        && incoming().programId == existing().programId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['verificationStatus', 'verifiedBy', 'verifiedAt', 'rejectionReason', 'updatedAt']);
+      allow delete: if isValidId(paymentId) && isAdmin();
+    }
+
+    // 6. Website Settings (CMS Content - Public get 'default', Admin write)
+    match /website_settings/{settingId} {
+      allow get: if isValidId(settingId) && settingId == 'default';
+      allow list: if isAdmin();
+      allow create, update: if isValidId(settingId)
+        && settingId == 'default'
+        && isAdmin()
+        && isValidWebsiteSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 7. Bank Settings (Public get 'default' for transfer instructions, Admin write)
+    match /bank_settings/{settingId} {
+      allow get: if isValidId(settingId) && settingId == 'default';
+      allow list: if isAdmin();
+      allow create, update: if isValidId(settingId)
+        && settingId == 'default'
+        && isAdmin()
+        && isValidBankSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 8. Community Settings (Strictly Private to Admin - NEVER public in Firestore)
+    match /community_settings/{settingId} {
+      allow get: if isValidId(settingId) && isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isValidId(settingId)
+        && settingId == 'default'
+        && isAdmin()
+        && isValidCommunitySettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 9. Notification Settings (Strictly Private to Admin)
+    match /notification_settings/{settingId} {
+      allow get: if isValidId(settingId) && isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isValidId(settingId)
+        && settingId == 'default'
+        && isAdmin()
+        && isValidNotificationSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 10. Notification Logs (Admin read/update/retry, validated create)
+    match /notification_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId)
+        && isValidNotificationLog(incoming())
+        && incoming().id == logId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(logId)
+        && isAdmin()
+        && isValidNotificationLog(incoming())
+        && incoming().id == existing().id
+        && incoming().eventKey == existing().eventKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'attempts', 'errorMessage', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // 11. Audit Logs (Immutable Admin Activity Trail)
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId)
+        && isAdmin()
+        && isValidAuditLog(incoming())
+        && incoming().id == logId
+        && incoming().adminUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

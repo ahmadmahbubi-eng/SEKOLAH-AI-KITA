@@ -1,0 +1,6 @@
+{
+  "name": "SAKITA — Sekolah AI Kita Smart Registration System",
+  "description": "Platform resmi Sekolah AI Kita (SAKITA) untuk pendaftaran Intensive AI Bootcamp 2026, pembayaran transfer bank, verifikasi peserta, dan pengelolaan program pelatihan AI bagi sekolah dan pesantren.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

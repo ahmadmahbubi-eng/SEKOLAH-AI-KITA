@@ -1,0 +1,415 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Pengguna administrator berwenang untuk SAKITA Command Center.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["super_admin", "admin"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role", "active", "createdAt", "updatedAt"]
+    },
+    "Program": {
+      "title": "Program",
+      "description": "Program dan angkatan pelatihan AI SAKITA.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slug": { "type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-z0-9\\-]+$" },
+        "name": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "batchLabel": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "description": { "type": "string", "minLength": 10, "maxLength": 2000 },
+        "dateLabel": { "type": "string", "minLength": 3, "maxLength": 100 },
+        "startDateIso": { "type": "string", "minLength": 10, "maxLength": 40 },
+        "endDateIso": { "type": "string", "minLength": 10, "maxLength": 40 },
+        "durationLabel": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "location": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "price": { "type": "number" },
+        "quota": { "type": "number" },
+        "confirmedCount": { "type": "number" },
+        "reservedCount": { "type": "number" },
+        "waitlistCount": { "type": "number" },
+        "registrationSeq": { "type": "number" },
+        "reservationHours": { "type": "number" },
+        "projectCount": { "type": "number" },
+        "targetRevenue": { "type": "number" },
+        "status": { "type": "string", "enum": ["open", "closed", "archived"] },
+        "isFeatured": { "type": "boolean" },
+        "facilities": { "type": "array" },
+        "curriculum": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "batchLabel",
+        "description",
+        "dateLabel",
+        "startDateIso",
+        "endDateIso",
+        "durationLabel",
+        "location",
+        "price",
+        "quota",
+        "confirmedCount",
+        "reservedCount",
+        "waitlistCount",
+        "registrationSeq",
+        "reservationHours",
+        "projectCount",
+        "targetRevenue",
+        "status",
+        "isFeatured",
+        "facilities",
+        "curriculum",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "Data pendaftaran peserta pelatihan SAKITA (berisi PII, hanya dapat dibaca admin).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationNumber": { "type": "string", "minLength": 8, "maxLength": 40, "pattern": "^SAKITA-[0-9]{4}-[0-9]{4,6}$" },
+        "accessToken": { "type": "string", "minLength": 32, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "programId": { "type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "programName": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "gender": { "type": "string", "enum": ["Laki-laki", "Perempuan"] },
+        "whatsapp": { "type": "string", "minLength": 10, "maxLength": 20, "pattern": "^62[0-9]{8,15}$" },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "institution": { "type": "string", "minLength": 2, "maxLength": 180 },
+        "position": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "city": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "province": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "aiExperience": { "type": "string", "maxLength": 1000 },
+        "expectations": { "type": "string", "maxLength": 1000 },
+        "registrationStatus": { "type": "string", "enum": ["pending_payment", "active", "waitlist", "cancelled", "expired"] },
+        "paymentStatus": { "type": "string", "enum": ["belum_unggah", "menunggu_verifikasi", "lunas", "ditolak", "minta_bukti_ulang", "daftar_tunggu"] },
+        "amount": { "type": "number" },
+        "rejectionReason": { "type": "string", "maxLength": 500 },
+        "reservationExpiresAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "registrationNumber",
+        "accessToken",
+        "programId",
+        "programName",
+        "fullName",
+        "gender",
+        "whatsapp",
+        "email",
+        "institution",
+        "position",
+        "city",
+        "province",
+        "aiExperience",
+        "expectations",
+        "registrationStatus",
+        "paymentStatus",
+        "amount",
+        "rejectionReason",
+        "reservationExpiresAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RegistrationTicket": {
+      "title": "RegistrationTicket",
+      "description": "Ringkasan status pendaftaran peserta yang diakses secara aman menggunakan token acak 32+ karakter.",
+      "type": "object",
+      "properties": {
+        "accessToken": { "type": "string", "minLength": 32, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationId": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationNumber": { "type": "string", "minLength": 8, "maxLength": 40, "pattern": "^SAKITA-[0-9]{4}-[0-9]{4,6}$" },
+        "programId": { "type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "programName": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "programDates": { "type": "string", "minLength": 3, "maxLength": 100 },
+        "programLocation": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "institution": { "type": "string", "minLength": 2, "maxLength": 180 },
+        "amount": { "type": "number" },
+        "registrationStatus": { "type": "string", "enum": ["pending_payment", "active", "waitlist", "cancelled", "expired"] },
+        "paymentStatus": { "type": "string", "enum": ["belum_unggah", "menunggu_verifikasi", "lunas", "ditolak", "minta_bukti_ulang", "daftar_tunggu"] },
+        "rejectionReason": { "type": "string", "maxLength": 500 },
+        "reservationExpiresAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "accessToken",
+        "registrationId",
+        "registrationNumber",
+        "programId",
+        "programName",
+        "programDates",
+        "programLocation",
+        "fullName",
+        "institution",
+        "amount",
+        "registrationStatus",
+        "paymentStatus",
+        "rejectionReason",
+        "reservationExpiresAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Data bukti transfer pembayaran peserta untuk verifikasi admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationId": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationNumber": { "type": "string", "minLength": 8, "maxLength": 40, "pattern": "^SAKITA-[0-9]{4}-[0-9]{4,6}$" },
+        "accessToken": { "type": "string", "minLength": 32, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "programId": { "type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "senderBank": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "transferDate": { "type": "string", "minLength": 8, "maxLength": 30 },
+        "transferAmount": { "type": "number" },
+        "proofFilePath": { "type": "string", "minLength": 5, "maxLength": 500 },
+        "proofFileName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "proofMimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "application/pdf"] },
+        "verificationStatus": { "type": "string", "enum": ["menunggu_verifikasi", "lunas", "ditolak", "minta_bukti_ulang"] },
+        "verifiedBy": { "type": "string", "maxLength": 160 },
+        "verifiedAt": { "type": "string", "maxLength": 40 },
+        "rejectionReason": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "registrationId",
+        "registrationNumber",
+        "accessToken",
+        "programId",
+        "senderName",
+        "senderBank",
+        "transferDate",
+        "transferAmount",
+        "proofFilePath",
+        "proofFileName",
+        "proofMimeType",
+        "verificationStatus",
+        "verifiedBy",
+        "verifiedAt",
+        "rejectionReason",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WebsiteSettings": {
+      "title": "WebsiteSettings",
+      "description": "Konten CMS landing page SAKITA yang dikelola admin.",
+      "type": "object",
+      "properties": {
+        "brandName": { "type": "string", "maxLength": 80 },
+        "brandSubtitle": { "type": "string", "maxLength": 120 },
+        "tagline": { "type": "string", "maxLength": 180 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "heroEyebrow": { "type": "string", "maxLength": 100 },
+        "heroHeadline": { "type": "string", "maxLength": 240 },
+        "heroSubheadline": { "type": "string", "maxLength": 300 },
+        "heroDescription": { "type": "string", "maxLength": 1500 },
+        "bannerUrl": { "type": "string", "maxLength": 500 },
+        "whatsappNumber": { "type": "string", "maxLength": 30 },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "privacyPolicy": { "type": "string", "maxLength": 12000 },
+        "termsConditions": { "type": "string", "maxLength": 12000 },
+        "mentor": { "type": "object" },
+        "hotelGallery": { "type": "array" },
+        "projects": { "type": "array" },
+        "facilities": { "type": "array" },
+        "faqs": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "brandName",
+        "brandSubtitle",
+        "tagline",
+        "logoUrl",
+        "heroEyebrow",
+        "heroHeadline",
+        "heroSubheadline",
+        "heroDescription",
+        "bannerUrl",
+        "whatsappNumber",
+        "contactEmail",
+        "privacyPolicy",
+        "termsConditions",
+        "mentor",
+        "hotelGallery",
+        "projects",
+        "facilities",
+        "faqs",
+        "updatedAt"
+      ]
+    },
+    "BankSettings": {
+      "title": "BankSettings",
+      "description": "Pengaturan rekening transfer bank pribadi untuk pembayaran pelatihan.",
+      "type": "object",
+      "properties": {
+        "isConfigured": { "type": "boolean" },
+        "bankName": { "type": "string", "maxLength": 100 },
+        "accountNumber": { "type": "string", "maxLength": 60 },
+        "accountHolder": { "type": "string", "maxLength": 140 },
+        "transferInstructions": { "type": "string", "maxLength": 2000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["isConfigured", "bankName", "accountNumber", "accountHolder", "transferInstructions", "updatedAt"]
+    },
+    "CommunitySettings": {
+      "title": "CommunitySettings",
+      "description": "Pengaturan komunitas WhatsApp Sekolah AI Kita (akses admin saja, tidak publik).",
+      "type": "object",
+      "properties": {
+        "communityName": { "type": "string", "maxLength": 140 },
+        "whatsappInviteUrl": { "type": "string", "maxLength": 500 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["communityName", "whatsappInviteUrl", "description", "isActive", "updatedAt"]
+    },
+    "NotificationSettings": {
+      "title": "NotificationSettings",
+      "description": "Pengaturan template dan alamat notifikasi email/WhatsApp admin.",
+      "type": "object",
+      "properties": {
+        "adminEmail": { "type": "string", "maxLength": 160 },
+        "adminWhatsapp": { "type": "string", "maxLength": 30 },
+        "participantEmailSubject": { "type": "string", "maxLength": 200 },
+        "participantEmailTemplate": { "type": "string", "maxLength": 4000 },
+        "adminEmailSubject": { "type": "string", "maxLength": 200 },
+        "adminEmailTemplate": { "type": "string", "maxLength": 4000 },
+        "adminWhatsappTemplate": { "type": "string", "maxLength": 2000 },
+        "verifiedEmailSubject": { "type": "string", "maxLength": 200 },
+        "verifiedEmailTemplate": { "type": "string", "maxLength": 4000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "adminEmail",
+        "adminWhatsapp",
+        "participantEmailSubject",
+        "participantEmailTemplate",
+        "adminEmailSubject",
+        "adminEmailTemplate",
+        "adminWhatsappTemplate",
+        "verifiedEmailSubject",
+        "verifiedEmailTemplate",
+        "updatedAt"
+      ]
+    },
+    "NotificationLog": {
+      "title": "NotificationLog",
+      "description": "Riwayat antrean dan pengiriman notifikasi email/WhatsApp.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 10, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventKey": { "type": "string", "minLength": 4, "maxLength": 140 },
+        "channel": { "type": "string", "enum": ["email_participant", "email_admin", "whatsapp_admin", "email_verified"] },
+        "recipient": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "registrationNumber": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["sent", "failed", "unconfigured", "queued"] },
+        "attempts": { "type": "number" },
+        "errorMessage": { "type": "string", "maxLength": 500 },
+        "payloadSummary": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "eventKey",
+        "channel",
+        "recipient",
+        "subject",
+        "registrationNumber",
+        "status",
+        "attempts",
+        "errorMessage",
+        "payloadSummary",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Catatan audit aktivitas penting admin (immutable).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 10, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "adminEmail": { "type": "string", "minLength": 5, "maxLength": 160 },
+        "action": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "targetType": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "details": { "type": "string", "maxLength": 1200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "adminUid", "adminEmail", "action", "targetType", "targetId", "details", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Daftar akun admin berwenang."
+    },
+    "/programs/{programId}": {
+      "schema": { "$ref": "#/entities/Program" },
+      "description": "Program pelatihan dan pelacakan kuota aktual."
+    },
+    "/registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/Registration" },
+      "description": "Data pendaftaran peserta (PII, khusus admin)."
+    },
+    "/registration_tickets/{accessToken}": {
+      "schema": { "$ref": "#/entities/RegistrationTicket" },
+      "description": "Tiket akses status peserta berbasis token acak aman."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Data pembayaran dan path bukti transfer peserta."
+    },
+    "/website_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/WebsiteSettings" },
+      "description": "Pengaturan konten landing page."
+    },
+    "/bank_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/BankSettings" },
+      "description": "Pengaturan rekening transfer bank."
+    },
+    "/community_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/CommunitySettings" },
+      "description": "Pengaturan link komunitas WhatsApp (privat admin)."
+    },
+    "/notification_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/NotificationSettings" },
+      "description": "Pengaturan notifikasi dan template pesan (privat admin)."
+    },
+    "/notification_logs/{logId}": {
+      "schema": { "$ref": "#/entities/NotificationLog" },
+      "description": "Log pengiriman notifikasi dan status integrasi."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit log aktivitas admin yang tidak dapat diubah."
+    }
+  }
+}
