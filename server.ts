@@ -17,16 +17,39 @@ const PORT = Number(process.env.PORT || 3000);
 const IS_PROD = process.env.NODE_ENV === 'production';
 const INITIAL_ADMIN_EMAIL = (process.env.INITIAL_ADMIN_EMAIL || 'ahmadmahbubi@gmail.com').toLowerCase();
 
-// Load Firebase Project ID from firebase-applet-config.json (public web config)
+// Load Firebase Project ID & Database ID from firebase-applet-config.json (public web config)
 let FIREBASE_PROJECT_ID = '';
+let FIREBASE_DATABASE_ID = '(default)';
 try {
   const cfgPath = path.resolve(__dirname, 'firebase-applet-config.json');
   if (fs.existsSync(cfgPath)) {
-    const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) as { projectId?: string };
+    const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) as {
+      projectId?: string;
+      firestoreDatabaseId?: string;
+    };
     FIREBASE_PROJECT_ID = parsed.projectId || '';
+    FIREBASE_DATABASE_ID = parsed.firestoreDatabaseId || '(default)';
   }
 } catch (err) {
   console.error('Failed to read firebase-applet-config.json:', err);
+}
+
+async function verifyTicketSubmittedInFirestore(accessToken: string): Promise<boolean> {
+  if (!FIREBASE_PROJECT_ID || !/^[a-zA-Z0-9_-]{32,128}$/.test(accessToken)) {
+    return false;
+  }
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}/databases/${encodeURIComponent(FIREBASE_DATABASE_ID)}/documents/registration_tickets/${encodeURIComponent(accessToken)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return false;
+    const data = (await resp.json()) as {
+      fields?: { paymentStatus?: { stringValue?: string } };
+    };
+    const status = data.fields?.paymentStatus?.stringValue || '';
+    return status === 'menunggu_verifikasi' || status === 'lunas';
+  } catch {
+    return false;
+  }
 }
 
 // Isolated storage directories strictly outside dist/
@@ -117,11 +140,11 @@ let notifRuntimeConfig: NotifRuntimeConfig = readJsonFile<NotifRuntimeConfig>(NO
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
     'Halo {{nama}},\n\nSelamat! Pendaftaran Anda pada program {{program}} dengan nomor registrasi {{registrasi}} dan bukti transfer telah kami terima.\nStatus saat ini: Menunggu Verifikasi.\n\nAkses Komunitas Sekolah AI Kita: {{komunitas}}\n\nSalam hangat,\nTim Sekolah AI Kita (SAKITA)',
-  adminEmailSubject: 'Pendaftaran Peserta Baru - SAKITA',
+  adminEmailSubject: 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA',
   adminEmailTemplate:
-    'Pendaftaran peserta baru telah masuk.\nNomor Registrasi: {{registrasi}}\nNama: {{nama}}\nLembaga: {{lembaga}}\nJabatan: {{jabatan}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nBuka SAKITA Command Center: {{dashboard}}',
+    'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
   adminWhatsappTemplate:
-    'PENDAFTARAN BARU SAKITA\n\nNama: {{nama}}\nLembaga: {{lembaga}}\nJabatan: {{jabatan}}\nRegistrasi: {{registrasi}}\nPembayaran: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan periksa dashboard admin.',
+    '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
     'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{registrasi}}) telah diverifikasi dan berstatus LUNAS.\n\nTanggal: {{tanggal}}\nLokasi: {{lokasi}}\n\nSilakan persiapkan laptop pribadi dan ikuti informasi teknis di Komunitas Sekolah AI Kita.\n\nSampai jumpa di Jambi!\nTim SAKITA',
@@ -325,47 +348,94 @@ async function sendResendEmail(to: string, subject: string, textBody: string): P
 }
 
 async function sendWhatsAppMessage(toPhone: string, textBody: string): Promise<{ status: 'sent' | 'failed' | 'unconfigured'; attempts: number; errorMessage: string }> {
-  const token = process.env.WHATSAPP_API_TOKEN?.trim();
+  const fonnteToken = process.env.FONNTE_TOKEN?.trim();
+  const metaToken = process.env.WHATSAPP_API_TOKEN?.trim();
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
-
-  if (!token || !phoneNumberId) {
-    return {
-      status: 'unconfigured',
-      attempts: 0,
-      errorMessage: 'WHATSAPP_API_TOKEN atau WHATSAPP_PHONE_NUMBER_ID belum dikonfigurasi pada server.',
-    };
-  }
-
   const normalized = normalizeIndonesianPhone(toPhone);
-  let attempts = 0;
-  let lastError = '';
-  while (attempts < 2) {
-    attempts += 1;
-    try {
-      const response = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(phoneNumberId)}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: normalized,
-          type: 'text',
-          text: { body: textBody },
-        }),
-      });
-      if (response.ok) {
-        return { status: 'sent', attempts, errorMessage: '' };
+
+  // 1. Prefer Fonnte (popular, fast Indonesian WhatsApp gateway) when configured
+  if (fonnteToken) {
+    let attempts = 0;
+    let lastError = '';
+    while (attempts < 2) {
+      attempts += 1;
+      try {
+        const bodyParams = new URLSearchParams({
+          target: normalized,
+          message: textBody,
+          countryCode: '62',
+        });
+        const response = await fetch('https://api.fonnte.com/send', {
+          method: 'POST',
+          headers: {
+            Authorization: fonnteToken,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: bodyParams.toString(),
+        });
+        const rawText = await response.text();
+        let parsedStatus = false;
+        try {
+          const parsed = JSON.parse(rawText) as { status?: boolean; reason?: string };
+          parsedStatus = parsed.status === true;
+          if (!parsedStatus && parsed.reason) {
+            lastError = `Fonnte: ${parsed.reason.slice(0, 200)}`;
+          }
+        } catch {
+          parsedStatus = response.ok;
+        }
+        if (response.ok && parsedStatus) {
+          return { status: 'sent', attempts, errorMessage: '' };
+        }
+        if (!lastError) {
+          lastError = `HTTP ${response.status}: ${rawText.slice(0, 200)}`;
+        }
+        if (response.status < 500) break;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Gagal menghubungi layanan WhatsApp Fonnte.';
       }
-      const errText = await response.text();
-      lastError = `HTTP ${response.status}: ${errText.slice(0, 200)}`;
-      if (response.status < 500) break;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Gagal menghubungi WhatsApp Business API.';
     }
+    return { status: 'failed', attempts, errorMessage: lastError };
   }
-  return { status: 'failed', attempts, errorMessage: lastError };
+
+  // 2. Alternative: Meta WhatsApp Business Cloud API
+  if (metaToken && phoneNumberId) {
+    let attempts = 0;
+    let lastError = '';
+    while (attempts < 2) {
+      attempts += 1;
+      try {
+        const response = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(phoneNumberId)}/messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${metaToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: normalized,
+            type: 'text',
+            text: { body: textBody },
+          }),
+        });
+        if (response.ok) {
+          return { status: 'sent', attempts, errorMessage: '' };
+        }
+        const errText = await response.text();
+        lastError = `HTTP ${response.status}: ${errText.slice(0, 200)}`;
+        if (response.status < 500) break;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Gagal menghubungi WhatsApp Business API.';
+      }
+    }
+    return { status: 'failed', attempts, errorMessage: lastError };
+  }
+
+  return {
+    status: 'unconfigured',
+    attempts: 0,
+    errorMessage: 'FONNTE_TOKEN (atau WHATSAPP_API_TOKEN & WHATSAPP_PHONE_NUMBER_ID) belum dikonfigurasi pada server.',
+  };
 }
 
 const uploadMemory = multer({
@@ -398,20 +468,52 @@ async function startServer() {
   });
 
   app.get('/api/notifications/status', requireAdminAuth, (_req, res) => {
+    const emailConnected = Boolean(process.env.RESEND_API_KEY?.trim());
+    const fonnteConnected = Boolean(process.env.FONNTE_TOKEN?.trim());
+    const metaConnected = Boolean(
+      process.env.WHATSAPP_API_TOKEN?.trim() && process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
+    );
+    const waConnected = fonnteConnected || metaConnected;
+
     res.json({
       email: {
-        provider: 'Resend',
-        connected: Boolean(process.env.RESEND_API_KEY?.trim()),
-        statusLabel: process.env.RESEND_API_KEY?.trim() ? 'Terhubung' : 'Belum Terhubung',
+        provider: 'Resend Email',
+        connected: emailConnected,
+        statusLabel: emailConnected ? 'Terhubung' : 'Belum Terhubung',
       },
       whatsapp: {
-        provider: 'WhatsApp Business Cloud API',
-        connected: Boolean(process.env.WHATSAPP_API_TOKEN?.trim() && process.env.WHATSAPP_PHONE_NUMBER_ID?.trim()),
-        statusLabel:
-          process.env.WHATSAPP_API_TOKEN?.trim() && process.env.WHATSAPP_PHONE_NUMBER_ID?.trim()
-            ? 'Terhubung'
-            : 'Belum Terhubung',
+        provider: fonnteConnected
+          ? 'Fonnte WhatsApp'
+          : metaConnected
+            ? 'WhatsApp Business Cloud API'
+            : 'Fonnte / WhatsApp Business API',
+        connected: waConnected,
+        statusLabel: waConnected ? 'Terhubung' : 'Belum Terhubung',
       },
+    });
+  });
+
+  app.post('/api/notifications/test-admin', requireAdminAuth, rateLimit('notif_test', 10, 15 * 60 * 1000), async (req, res) => {
+    const appUrl = (process.env.APP_URL || 'https://sekolahaikita.my.id').replace(/\/$/, '');
+    const targetAdminEmail = notifRuntimeConfig.adminEmail || INITIAL_ADMIN_EMAIL;
+    const targetAdminWa = notifRuntimeConfig.adminWhatsapp || DEFAULT_ADMIN_WHATSAPP;
+    const nowText = new Intl.DateTimeFormat('id-ID', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Jakarta',
+    }).format(new Date());
+
+    const emailBody = `Tes notifikasi otomatis SAKITA berhasil dijalankan pada ${nowText} WIB.\n\nSetiap kali peserta mengunggah bukti transfer, notifikasi akan langsung dikirim ke email ini (${targetAdminEmail}) agar Anda dapat segera memverifikasi di:\n${appUrl}/admin`;
+    const waBody = `*TES NOTIFIKASI OTOMATIS SAKITA*\n\nBerhasil terhubung pada ${nowText} WIB.\nSetiap bukti transfer peserta baru akan langsung masuk ke nomor ini.\n\nDashboard Admin:\n${appUrl}/admin`;
+
+    const [emailOutcome, waOutcome] = await Promise.all([
+      sendResendEmail(targetAdminEmail, 'Tes Notifikasi Admin — Sekolah AI Kita', emailBody),
+      sendWhatsAppMessage(targetAdminWa, waBody),
+    ]);
+
+    res.json({
+      email: { recipient: targetAdminEmail, ...emailOutcome },
+      whatsapp: { recipient: normalizeIndonesianPhone(targetAdminWa), ...waOutcome },
     });
   });
 
@@ -689,6 +791,9 @@ async function startServer() {
       position,
       programName,
       amount,
+      senderName,
+      senderBank,
+      transferDate,
     } = req.body as Record<string, unknown>;
 
     if (typeof accessToken !== 'string' || typeof registrationNumber !== 'string' || typeof fullName !== 'string' || typeof email !== 'string') {
@@ -696,26 +801,30 @@ async function startServer() {
       return;
     }
 
-    const hasProof = Object.values(proofIndex).some((rec) => rec.accessToken === accessToken);
-    if (!hasProof) {
-      res.status(403).json({ error: 'Bukti pembayaran belum tercatat di server.' });
+    const hasLocalProof = Object.values(proofIndex).some((rec) => rec.accessToken === accessToken);
+    const hasFirestoreProof = hasLocalProof ? true : await verifyTicketSubmittedInFirestore(accessToken);
+    if (!hasFirestoreProof) {
+      res.status(403).json({ error: 'Bukti pembayaran belum tercatat.' });
       return;
     }
 
     const baseKey = `submission:${registrationNumber}`;
-    const appUrl = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+    const appUrl = (process.env.APP_URL || 'https://sekolahaikita.my.id').replace(/\/$/, '');
     const communityLink =
       communityGate.isActive && communityGate.whatsappInviteUrl
         ? communityGate.whatsappInviteUrl
         : 'Hubungi admin SAKITA melalui WhatsApp untuk mendapatkan tautan komunitas.';
 
     const vars: Record<string, string> = {
-      nama: String(fullName),
-      lembaga: String(institution || '-'),
-      jabatan: String(position || '-'),
-      registrasi: String(registrationNumber),
-      program: String(programName || 'Kelas Intensif AI untuk Pengelolaan Sekolah & Pesantren'),
+      nama: String(fullName).slice(0, 140),
+      lembaga: String(institution || '-').slice(0, 180),
+      jabatan: String(position || '-').slice(0, 120),
+      registrasi: String(registrationNumber).slice(0, 40),
+      program: String(programName || 'Kelas Intensif AI untuk Pengelolaan Sekolah & Pesantren').slice(0, 180),
       nominal: formatRupiahServer(Number(amount || 0)),
+      pengirim: String(senderName || fullName).slice(0, 140),
+      bank: String(senderBank || '-').slice(0, 100),
+      tanggal_transfer: String(transferDate || '-').slice(0, 30),
       komunitas: communityLink,
       dashboard: `${appUrl}/admin`,
     };
@@ -744,7 +853,7 @@ async function startServer() {
     const adminEmailKey = `${baseKey}:email_admin`;
     const targetAdminEmail = notifRuntimeConfig.adminEmail || INITIAL_ADMIN_EMAIL;
     if (!sentEventKeys.has(adminEmailKey) && targetAdminEmail) {
-      const subject = notifRuntimeConfig.adminEmailSubject || 'Pendaftaran Peserta Baru - SAKITA';
+      const subject = notifRuntimeConfig.adminEmailSubject || 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA';
       const body = renderTemplate(notifRuntimeConfig.adminEmailTemplate, vars);
       const outcome = await sendResendEmail(targetAdminEmail, subject, body);
       if (outcome.status === 'sent') sentEventKeys.add(adminEmailKey);
@@ -761,7 +870,7 @@ async function startServer() {
 
     // C. WhatsApp Admin
     const adminWaKey = `${baseKey}:whatsapp_admin`;
-    const targetAdminWa = notifRuntimeConfig.adminWhatsapp || '6285769427335';
+    const targetAdminWa = notifRuntimeConfig.adminWhatsapp || DEFAULT_ADMIN_WHATSAPP;
     if (!sentEventKeys.has(adminWaKey) && targetAdminWa) {
       const body = renderTemplate(notifRuntimeConfig.adminWhatsappTemplate, vars);
       const outcome = await sendWhatsAppMessage(targetAdminWa, body);
@@ -769,7 +878,7 @@ async function startServer() {
       results.push({
         channel: 'whatsapp_admin',
         recipient: normalizeIndonesianPhone(targetAdminWa),
-        subject: 'WhatsApp Notifikasi Pendaftaran Baru',
+        subject: 'WhatsApp Notifikasi Bukti Transfer Masuk',
         status: outcome.status,
         attempts: outcome.attempts,
         errorMessage: outcome.errorMessage,

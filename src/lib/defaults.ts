@@ -243,11 +243,11 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
     'Halo {{nama}},\n\nSelamat datang di keluarga besar Sekolah AI Kita (SAKITA).\nNomor Registrasi: {{registrasi}}\nProgram: {{program}}\nStatus Pembayaran: Menunggu Verifikasi\n\nAkses Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nTim kami akan segera memverifikasi bukti pembayaran Anda.',
-  adminEmailSubject: 'Pendaftaran Peserta Baru - SAKITA',
+  adminEmailSubject: 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA',
   adminEmailTemplate:
-    'Pendaftaran peserta baru telah masuk.\nNomor Registrasi: {{registrasi}}\nNama: {{nama}}\nLembaga: {{lembaga}}\nJabatan: {{jabatan}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nPeriksa SAKITA Command Center: {{dashboard}}',
+    'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
   adminWhatsappTemplate:
-    'PENDAFTARAN BARU SAKITA\n\nNama: {{nama}}\nLembaga: {{lembaga}}\nJabatan: {{jabatan}}\nRegistrasi: {{registrasi}}\nPembayaran: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan periksa dashboard admin.',
+    '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
     'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} dengan nomor registrasi {{registrasi}} telah diverifikasi dan berstatus LUNAS.\n\nJadwal: {{tanggal}}\nLokasi: {{lokasi}}\n\nInformasi persiapan pelatihan akan terus kami sampaikan melalui Komunitas Sekolah AI Kita.',

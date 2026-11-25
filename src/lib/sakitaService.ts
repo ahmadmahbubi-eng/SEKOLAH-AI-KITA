@@ -50,6 +50,12 @@ export function isJsonResponse(resp: Response): boolean {
   return ct.includes('application/json');
 }
 
+export function apiUrl(path: string): string {
+  const rawBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '';
+  if (!rawBase) return path;
+  return `${rawBase.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -654,7 +660,7 @@ export async function submitPaymentProofTransaction(input: SubmitPaymentProofInp
 
   // Best-effort notification dispatch — failure MUST NOT affect saved registration
   try {
-    const resp = await fetch('/api/notifications/dispatch-submission', {
+    const resp = await fetch(apiUrl('/api/notifications/dispatch-submission'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -666,6 +672,9 @@ export async function submitPaymentProofTransaction(input: SubmitPaymentProofInp
         position: input.position,
         programName: input.programName,
         amount: input.transferAmount,
+        senderName: input.senderName.trim(),
+        senderBank: input.senderBank.trim(),
+        transferDate: input.transferDate,
       }),
     });
     if (resp.ok && isJsonResponse(resp)) {
@@ -1364,6 +1373,31 @@ export async function uploadAdminAsset(file: File): Promise<string> {
     throw new Error(data.error || 'Gagal mengunggah gambar.');
   }
   return data.url;
+}
+
+export async function sendTestAdminNotification(): Promise<{
+  email: { recipient: string; status: 'sent' | 'failed' | 'unconfigured'; errorMessage: string };
+  whatsapp: { recipient: string; status: 'sent' | 'failed' | 'unconfigured'; errorMessage: string };
+}> {
+  const headers = await getAdminAuthHeaders();
+  const resp = await fetch(apiUrl('/api/notifications/test-admin'), {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+  });
+  if (!isJsonResponse(resp)) {
+    throw new Error(
+      'Server notifikasi otomatis tidak terdeteksi pada domain ini. Pastikan aplikasi dijalankan sebagai server Node.js atau atur VITE_API_BASE_URL.',
+    );
+  }
+  const data = (await resp.json()) as {
+    email?: { recipient: string; status: 'sent' | 'failed' | 'unconfigured'; errorMessage: string };
+    whatsapp?: { recipient: string; status: 'sent' | 'failed' | 'unconfigured'; errorMessage: string };
+    error?: string;
+  };
+  if (!resp.ok || !data.email || !data.whatsapp) {
+    throw new Error(data.error || 'Gagal menjalankan tes notifikasi admin.');
+  }
+  return { email: data.email, whatsapp: data.whatsapp };
 }
 
 export async function fetchAuditLogs(): Promise<import('../types').AuditLog[]> {

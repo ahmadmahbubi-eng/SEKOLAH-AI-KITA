@@ -78,10 +78,13 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
   }, [token]);
 
   const statusUrl = `${window.location.origin}/status/${encodeURIComponent(token)}`;
+  const adminDashboardUrl = `${window.location.origin}/admin`;
   const waAdminLink = toWhatsappLink(
     settings.whatsappNumber || '085121634560',
     ticket
-      ? `Halo Admin SAKITA, saya ${ticket.fullName} (No. Registrasi: ${ticket.registrationNumber}) ingin mengonfirmasi status pendaftaran saya.`
+      ? ticket.paymentStatus === 'menunggu_verifikasi'
+        ? `Halo Admin SAKITA, saya sudah membayar & mengunggah bukti transfer. Mohon verifikasi pendaftaran saya:\n\n• No. Registrasi: ${ticket.registrationNumber}\n• Nama: ${ticket.fullName}\n• Lembaga: ${ticket.institution}\n• Program: ${ticket.programName}\n• Nominal: ${formatRupiah(ticket.amount)}\n• Status: Menunggu Verifikasi\n\nCek verifikasi di Dashboard Admin:\n${adminDashboardUrl}`
+        : `Halo Admin SAKITA, saya ${ticket.fullName} (No. Registrasi: ${ticket.registrationNumber}) ingin mengonfirmasi status pendaftaran saya.`
       : 'Halo Admin SAKITA, saya ingin bertanya mengenai status pendaftaran saya.',
   );
 
@@ -295,6 +298,40 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>Unggah Bukti Transfer Sekarang</span>
               </button>
+            </div>
+          )}
+
+          {/* =================================================================
+              KONFIRMASI CEPAT KE WHATSAPP ADMIN (Appears right after proof upload)
+             ================================================================= */}
+          {!isWaitlist && ticket.paymentStatus === 'menunggu_verifikasi' && (
+            <div className="no-print mt-6 rounded-2xl border border-[#10B981]/35 bg-[#10B981]/10 p-5 sm:p-6">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#10B981]/40 bg-[#10B981]/15 text-[#10B981]">
+                    <MessageCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-base font-bold text-[#F8FAFC]">
+                      Konfirmasi Cepat ke WhatsApp Admin
+                    </h2>
+                    <p className="mt-1 text-xs leading-relaxed text-[#94A3B8]">
+                      Klik tombol di bawah agar notifikasi bukti transfer Anda langsung masuk ke
+                      WhatsApp Admin ({settings.whatsappNumber || '0851-2163-4560'}) dan dapat
+                      segera diverifikasi.
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={waAdminLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#10B981] px-5 text-xs font-bold text-[#080F1D] transition-colors hover:bg-[#10B981]/90 whitespace-nowrap"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Konfirmasi ke WA Admin</span>
+                </a>
+              </div>
             </div>
           )}
 

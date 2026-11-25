@@ -7,6 +7,7 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  Send,
   ShieldAlert,
   Users,
 } from 'lucide-react';
@@ -14,11 +15,13 @@ import { useToast } from '../../context/ToastContext';
 import { db } from '../../lib/firebase';
 import { formatTimestampID } from '../../lib/format';
 import {
+  apiUrl,
   getAdminAuthHeaders,
   isJsonResponse,
   saveBankSettings,
   saveCommunitySettings,
   saveNotificationSettings,
+  sendTestAdminNotification,
 } from '../../lib/sakitaService';
 import type {
   BankSettings,
@@ -48,14 +51,15 @@ export function AdminSettingsPanels({
   const [commForm, setCommForm] = useState<CommunitySettings>(communitySettings);
   const [notifForm, setNotifForm] = useState<NotificationSettings>(notificationSettings);
   const [saving, setSaving] = useState(false);
+  const [testingNotif, setTestingNotif] = useState(false);
   const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
 
   const [integrationStatus, setIntegrationStatus] = useState<{
     email: { provider: string; connected: boolean; statusLabel: string };
     whatsapp: { provider: string; connected: boolean; statusLabel: string };
   }>({
-    email: { provider: 'Resend', connected: false, statusLabel: 'Belum Terhubung' },
-    whatsapp: { provider: 'WhatsApp Business Cloud API', connected: false, statusLabel: 'Belum Terhubung' },
+    email: { provider: 'Resend Email', connected: false, statusLabel: 'Belum Terhubung' },
+    whatsapp: { provider: 'Fonnte / WhatsApp Business API', connected: false, statusLabel: 'Belum Terhubung' },
   });
 
   useEffect(() => setBankForm(bankSettings), [bankSettings]);
@@ -68,7 +72,7 @@ export function AdminSettingsPanels({
     async function loadStatus() {
       try {
         const headers = await getAdminAuthHeaders();
-        const resp = await fetch('/api/notifications/status', { headers });
+        const resp = await fetch(apiUrl('/api/notifications/status'), { headers });
         if (resp.ok && isJsonResponse(resp) && active) {
           const data = (await resp.json()) as typeof integrationStatus;
           setIntegrationStatus(data);
@@ -146,7 +150,7 @@ export function AdminSettingsPanels({
     setRetryingLogId(log.id);
     try {
       const headers = await getAdminAuthHeaders();
-      const resp = await fetch('/api/notifications/retry', {
+      const resp = await fetch(apiUrl('/api/notifications/retry'), {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -265,19 +269,57 @@ export function AdminSettingsPanels({
     );
   }
 
+  const handleTestAdminNotif = async () => {
+    if (testingNotif) return;
+    setTestingNotif(true);
+    try {
+      const res = await sendTestAdminNotification();
+      const emailOk = res.email.status === 'sent';
+      const waOk = res.whatsapp.status === 'sent';
+      if (emailOk && waOk) {
+        toast(
+          'success',
+          'Tes Notifikasi Terkirim ke Email & WhatsApp',
+          `Email (${res.email.recipient}) dan WhatsApp (${res.whatsapp.recipient}) berhasil terkirim.`,
+        );
+      } else {
+        toast(
+          emailOk || waOk ? 'info' : 'error',
+          'Hasil Tes Notifikasi Admin',
+          `Email: ${res.email.status}${res.email.errorMessage ? ` (${res.email.errorMessage})` : ''} | WA: ${res.whatsapp.status}${res.whatsapp.errorMessage ? ` (${res.whatsapp.errorMessage})` : ''}`,
+        );
+      }
+    } catch (err) {
+      toast('error', 'Tes Notifikasi Belum Dapat Dijalankan', err instanceof Error ? err.message : undefined);
+    } finally {
+      setTestingNotif(false);
+    }
+  };
+
   if (section === 'notifikasi') {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-slate-900">Notifikasi Otomatis</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Status integrasi server-side Resend Email & WhatsApp Business API, template pesan, dan riwayat pengiriman
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-bold text-slate-900">Notifikasi Otomatis</h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Notifikasi otomatis ke Email & WhatsApp Admin setiap kali peserta mengunggah bukti transfer
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={testingNotif}
+            onClick={handleTestAdminNotif}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {testingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 text-indigo-600" />}
+            <span>Kirim Tes ke WA & Email Admin</span>
+          </button>
         </div>
 
         {/* Live Integration Status */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {[integrationStatus.email, integrationStatus.whatsapp].map((srv) => (
+          {[integrationStatus.email, integrationStatus.whatsapp].map((srv, idx) => (
             <div key={srv.provider} className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between">
                 <p className="font-display text-sm font-semibold text-slate-900">{srv.provider}</p>
@@ -294,10 +336,12 @@ export function AdminSettingsPanels({
                   <span>{srv.statusLabel}</span>
                 </span>
               </div>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
                 {srv.connected
-                  ? 'Kredensial server terdeteksi. Pengiriman otomatis aktif saat peserta mengunggah bukti transfer atau diverifikasi Lunas.'
-                  : 'Tambahkan environment variable pada server (lihat README.md) untuk mengaktifkan pengiriman otomatis.'}
+                  ? 'Kredensial server terdeteksi. Notifikasi otomatis langsung masuk saat peserta mengunggah bukti transfer.'
+                  : idx === 0
+                    ? 'Tambahkan RESEND_API_KEY (dari resend.com) pada Settings → Secrets server untuk mengaktifkan email otomatis.'
+                    : 'Tambahkan FONNTE_TOKEN (dari fonnte.com) atau WHATSAPP_API_TOKEN pada Settings → Secrets server untuk WA otomatis.'}
               </p>
             </div>
           ))}
