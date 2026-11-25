@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   Clock,
+  Copy,
   Globe,
   GraduationCap,
   ImageIcon,
@@ -30,6 +31,7 @@ import { BrandMark } from '../components/BrandMark';
 import { CountdownTimer } from '../components/landing/CountdownTimer';
 import { HeroDashboardPreview } from '../components/landing/HeroDashboardPreview';
 import { LegalModal } from '../components/landing/LegalModal';
+import { useToast } from '../context/ToastContext';
 import { DEFAULT_PROGRAM, DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
 import { computeRemainingSeats, formatRupiah, toWhatsappLink } from '../lib/format';
 import { fetchPublicPrograms, fetchWebsiteSettings } from '../lib/sakitaService';
@@ -37,6 +39,7 @@ import type { Program, WebsiteSettings } from '../types';
 
 interface LandingPageProps {
   navigate: (path: string) => void;
+  initialProgramSlug?: string;
 }
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -88,14 +91,15 @@ const TARGET_AUDIENCE = [
   { role: 'Operator dan Tenaga Administrasi', desc: 'Mengotomatisasi alur PPDB, pencatatan SPP, dan pelaporan operasional.' },
 ];
 
-export function LandingPage({ navigate }: LandingPageProps) {
+export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) {
+  const { toast } = useToast();
   const [settings, setSettings] = useState<WebsiteSettings>(DEFAULT_WEBSITE_SETTINGS);
   const [programs, setPrograms] = useState<Program[]>([DEFAULT_PROGRAM]);
   const [selectedProgramId, setSelectedProgramId] = useState<string>(DEFAULT_PROGRAM.id);
-  const [hasLiveDbProgram, setHasLiveDbProgram] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [legalDialog, setLegalDialog] = useState<'privacy' | 'terms' | null>(null);
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; caption: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -107,11 +111,21 @@ export function LandingPage({ navigate }: LandingPageProps) {
         ]);
         if (!active) return;
         setSettings(webSettings);
-        const visiblePrograms = dbPrograms.filter((p) => p.status !== 'archived');
+        const visiblePrograms = dbPrograms
+          .filter((p) => p.status !== 'archived')
+          .sort((a, b) => {
+            if (a.isFeatured !== b.isFeatured) return a.isFeatured ? -1 : 1;
+            if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
+            return a.name.localeCompare(b.name);
+          });
         if (visiblePrograms.length > 0) {
           setPrograms(visiblePrograms);
-          setHasLiveDbProgram(true);
-          const featured = visiblePrograms.find((p) => p.isFeatured) || visiblePrograms[0];
+          const bySlug = initialProgramSlug
+            ? visiblePrograms.find(
+                (p) => p.slug === initialProgramSlug || p.id === initialProgramSlug,
+              )
+            : undefined;
+          const featured = bySlug || visiblePrograms.find((p) => p.isFeatured) || visiblePrograms[0];
           setSelectedProgramId(featured.id);
         }
       } catch (err) {
@@ -122,7 +136,7 @@ export function LandingPage({ navigate }: LandingPageProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialProgramSlug]);
 
   const activeProgram = programs.find((p) => p.id === selectedProgramId) || programs[0] || DEFAULT_PROGRAM;
   const remainingSeats = computeRemainingSeats(
@@ -133,17 +147,64 @@ export function LandingPage({ navigate }: LandingPageProps) {
   const isProgramFull = remainingSeats <= 0;
   const isProgramClosed = activeProgram.status !== 'open';
   const waLink = toWhatsappLink(
-    settings.whatsappNumber || '085769427335',
+    settings.whatsappNumber || '085121634560',
     `Halo Admin SAKITA, saya ingin bertanya mengenai program ${activeProgram.name}.`,
   );
 
-  const projects = settings.projects?.length ? settings.projects : DEFAULT_WEBSITE_SETTINGS.projects;
+  // Per-program dynamic content (automatically adapts whenever admin adds/selects any training)
+  const isPrimaryShowcase = activeProgram.isFeatured && !initialProgramSlug;
+  const heroEyebrow = activeProgram.batchLabel || settings.heroEyebrow || 'PROGRAM PELATIHAN AI SAKITA';
+  const heroHeadline =
+    activeProgram.headline?.trim() ||
+    (isPrimaryShowcase ? settings.heroHeadline : activeProgram.name);
+  const heroSubheadline =
+    activeProgram.subheadline?.trim() ||
+    (isPrimaryShowcase
+      ? settings.heroSubheadline
+      : `${activeProgram.durationLabel} · ${activeProgram.location}`);
+  const heroDescription = isPrimaryShowcase
+    ? settings.heroDescription
+    : activeProgram.description || settings.heroDescription;
+  const heroBannerUrl = activeProgram.bannerUrl?.trim() || settings.bannerUrl;
+
+  const projects =
+    activeProgram.curriculum && activeProgram.curriculum.length > 0
+      ? activeProgram.curriculum
+      : settings.projects?.length
+        ? settings.projects
+        : DEFAULT_WEBSITE_SETTINGS.projects;
+  const targetAudience =
+    activeProgram.targetAudience && activeProgram.targetAudience.length > 0
+      ? activeProgram.targetAudience
+      : TARGET_AUDIENCE;
   const facilities = activeProgram.facilities?.length ? activeProgram.facilities : settings.facilities;
   const faqs = settings.faqs?.length ? settings.faqs : DEFAULT_WEBSITE_SETTINGS.faqs;
+  const moduleCount = projects.length || activeProgram.projectCount;
 
   const showMentorSection = Boolean(
     settings.mentor && settings.mentor.enabled && settings.mentor.name.trim().length > 0,
   );
+
+  const selectProgram = (prog: Program, scrollToTop = false) => {
+    setSelectedProgramId(prog.id);
+    const nextPath = `/program/${encodeURIComponent(prog.slug || prog.id)}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, '', nextPath);
+    }
+    if (scrollToTop) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleCopyProgramLink = async (prog: Program) => {
+    const shareUrl = `${window.location.origin}/program/${encodeURIComponent(prog.slug || prog.id)}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast('success', 'Link pelatihan berhasil disalin', shareUrl);
+    } catch {
+      toast('info', 'Salin link pelatihan', shareUrl);
+    }
+  };
 
   const goToRegister = (programId?: string) => {
     const target = programId || activeProgram.id;
@@ -246,38 +307,45 @@ export function LandingPage({ navigate }: LandingPageProps) {
                 className="flex flex-col justify-center lg:col-span-6"
               >
                 <p className="font-mono text-xs font-medium tracking-[0.14em] text-[#22D3EE]">
-                  {settings.heroEyebrow || 'INTENSIVE AI BOOTCAMP 2026'}
+                  {heroEyebrow}
                 </p>
 
                 <h1
                   className="mt-4 font-display font-bold tracking-tight text-[#F8FAFC] [text-wrap:balance]"
                   style={{ fontSize: 'clamp(2.2rem, 3.8vw, 3.5rem)', lineHeight: 1.1 }}
                 >
-                  {settings.heroHeadline}
+                  {heroHeadline}
                 </h1>
 
                 <p className="mt-5 font-display text-lg font-medium text-[#22D3EE] sm:text-xl [text-wrap:balance]">
-                  {settings.heroSubheadline}
+                  {heroSubheadline}
                 </p>
 
                 <p className="mt-5 max-w-xl text-base leading-relaxed text-[#94A3B8]">
-                  {settings.heroDescription}
+                  {heroDescription}
                 </p>
 
                 <div className="mt-8 flex flex-wrap items-center gap-3.5">
                   <button
                     type="button"
+                    disabled={isProgramClosed}
                     onClick={() => goToRegister()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#22D3EE] px-6 text-sm font-semibold text-[#080F1D] transition-all hover:bg-[#22D3EE]/90 whitespace-nowrap shrink-0"
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#22D3EE] px-6 text-sm font-semibold text-[#080F1D] transition-all hover:bg-[#22D3EE]/90 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap shrink-0"
                   >
-                    <span>{isProgramFull ? 'Masuk Daftar Tunggu' : 'Daftar Sekarang'}</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <span>
+                      {isProgramClosed
+                        ? 'Pendaftaran Ditutup'
+                        : isProgramFull
+                          ? 'Masuk Daftar Tunggu'
+                          : 'Daftar Sekarang'}
+                    </span>
+                    {!isProgramClosed && <ArrowRight className="h-4 w-4" />}
                   </button>
                   <a
                     href="#program"
                     className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-700 bg-[#0F172A]/80 px-6 text-sm font-semibold text-[#F8FAFC] transition-colors hover:border-slate-500 hover:bg-[#0F172A] whitespace-nowrap shrink-0"
                   >
-                    Lihat Program Pelatihan
+                    {programs.length > 1 ? `Lihat ${programs.length} Program Pelatihan` : 'Lihat Program Pelatihan'}
                   </a>
                 </div>
 
@@ -299,17 +367,17 @@ export function LandingPage({ navigate }: LandingPageProps) {
                 transition={{ duration: 0.55, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
                 className="lg:col-span-6"
               >
-                {settings.bannerUrl ? (
+                {heroBannerUrl ? (
                   <div className="relative h-full min-h-[360px] overflow-hidden rounded-2xl border border-slate-800 bg-[#0F172A]">
                     <img
-                      src={settings.bannerUrl}
-                      alt="Banner Program Sekolah AI Kita"
+                      src={heroBannerUrl}
+                      alt={`Banner ${activeProgram.name}`}
                       referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#080F1D]/90 via-[#080F1D]/40 to-transparent p-5">
                       <p className="text-xs font-medium text-[#F8FAFC]">
-                        Ilustrasi Program — {activeProgram.name}
+                        {activeProgram.name}
                       </p>
                     </div>
                   </div>
@@ -319,25 +387,25 @@ export function LandingPage({ navigate }: LandingPageProps) {
               </motion.div>
             </div>
 
-            {/* Three Key Statistics Strip (Full-Width Row Below Split) */}
+            {/* Three Key Statistics Strip (Full-Width Row Below Split, 100% Dynamic per Program) */}
             <div className="mt-14 grid grid-cols-1 divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-[#0F172A]/90 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <div className="p-6 sm:p-7">
-                <p className="font-mono text-2xl font-bold text-[#F8FAFC] tabular-nums sm:text-3xl">
-                  4 HARI
+                <p className="font-mono text-xl font-bold text-[#F8FAFC] tabular-nums sm:text-2xl">
+                  {activeProgram.durationLabel}
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Praktik Intensif</p>
+                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Durasi & Format Praktik</p>
               </div>
               <div className="p-6 sm:p-7">
                 <p className="font-mono text-2xl font-bold text-[#22D3EE] tabular-nums sm:text-3xl">
-                  {activeProgram.projectCount} PROYEK
+                  {moduleCount} MATERI
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Aplikasi Digital</p>
+                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Kurikulum & Proyek Praktik</p>
               </div>
               <div className="p-6 sm:p-7">
                 <p className="font-mono text-2xl font-bold text-[#F8FAFC] tabular-nums sm:text-3xl">
                   {activeProgram.quota} PESERTA
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Kelas Eksklusif</p>
+                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Kuota Kelas Eksklusif</p>
               </div>
             </div>
           </div>
@@ -382,21 +450,25 @@ export function LandingPage({ navigate }: LandingPageProps) {
               {/* Solution Column */}
               <div className="flex flex-col justify-between rounded-2xl border border-[#22D3EE]/25 bg-gradient-to-b from-[#0F172A] to-[#080F1D] p-7 lg:col-span-5">
                 <div>
-                  <p className="text-xs font-medium text-[#22D3EE]">Pendekatan Praktis dengan AI</p>
+                  <p className="text-xs font-medium text-[#22D3EE]">
+                    Belajar AI · Bangun Aplikasi · Buka Peluang Baru
+                  </p>
                   <h3 className="mt-3 font-display text-2xl font-bold leading-snug text-[#F8FAFC]">
-                    Belajar Membangun Solusi Digital Secara Mandiri dan Bertahap
+                    Bangun Aplikasi Sendiri dan Buka Peluang Penghasilan Baru
                   </h3>
                   <p className="mt-4 text-sm leading-relaxed text-[#94A3B8]">
-                    Dengan kecerdasan buatan (AI), pengelola pendidikan dapat menerjemahkan alur kerja
-                    sekolah dan pesantren menjadi rancangan aplikasi nyata menggunakan bahasa sehari-hari—tanpa
-                    harus memulai dari nol sebagai programmer.
+                    Dengan kecerdasan buatan (AI), Anda dapat menerjemahkan kebutuhan nyata menjadi
+                    aplikasi digital fungsional tanpa harus berlatar belakang programmer. Keahlian ini
+                    bukan hanya menghemat biaya teknologi lembaga Anda, tetapi juga menjadi bekal nyata
+                    untuk membuat dan menjual aplikasi digital kepada sekolah, pesantren, UMKM, maupun
+                    instansi lain.
                   </p>
                   <ul className="mt-6 space-y-3 text-sm text-[#F8FAFC]">
                     {[
-                      'Memahami cara merancang alur data sekolah dan pesantren secara sistematis.',
-                      'Mempraktikkan langsung pembuatan 10 fondasi proyek aplikasi menggunakan alat bantu AI.',
-                      'Mampu menyesuaikan dan mengembangkan fitur secara mandiri setelah pelatihan selesai.',
-                      'Terhubung dengan komunitas praktisi pengelola pendidikan untuk pendampingan lanjutan.',
+                      'Menguasai pola kerja membangun aplikasi digital secara mandiri tanpa harus bisa coding.',
+                      'Mempraktikkan langsung pembuatan proyek aplikasi nyata yang siap dipakai dan dikembangkan.',
+                      'Mampu mengemas dan menjual aplikasi atau jasa digital untuk membuka sumber penghasilan baru.',
+                      'Terhubung dengan Komunitas Sekolah AI Kita untuk diskusi teknis, kolaborasi, dan pendampingan lanjutan.',
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-2.5">
                         <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#10B981]" />
@@ -407,9 +479,43 @@ export function LandingPage({ navigate }: LandingPageProps) {
                 </div>
 
                 <p className="mt-8 border-t border-slate-800 pt-4 text-xs leading-relaxed text-[#94A3B8]">
-                  Catatan jujur: Dalam 4 hari intensif, peserta dibimbing membangun prototipe fungsional
-                  dan pola kerja untuk 10 proyek aplikasi yang dapat terus disempurnakan sesuai kebutuhan
-                  operasional masing-masing lembaga.
+                  Catatan jujur: Peserta dibimbing membangun fondasi proyek aplikasi fungsional yang
+                  dapat langsung diterapkan di lembaga sendiri maupun dikembangkan kembali menjadi
+                  produk dan layanan digital bernilai jual.
+                </p>
+              </div>
+            </div>
+
+            {/* Three-Pillar Outcome Strip: Belajar AI -> Bangun Aplikasi -> Peluang Penghasilan */}
+            <div className="mt-10 grid grid-cols-1 divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-[#0F172A]/80 md:grid-cols-3 md:divide-x md:divide-y-0">
+              <div className="p-6 sm:p-7">
+                <p className="font-mono text-xs font-semibold text-[#22D3EE] tabular-nums">01</p>
+                <h3 className="mt-2 font-display text-lg font-bold text-[#F8FAFC]">
+                  Belajar AI Secara Praktis
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#94A3B8]">
+                  Pelajari langkah terstruktur menerjemahkan ide dan alur kerja menjadi sistem digital
+                  modern cukup dengan bahasa sehari-hari.
+                </p>
+              </div>
+              <div className="p-6 sm:p-7">
+                <p className="font-mono text-xs font-semibold text-[#22D3EE] tabular-nums">02</p>
+                <h3 className="mt-2 font-display text-lg font-bold text-[#F8FAFC]">
+                  Bangun Aplikasi Sendiri
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#94A3B8]">
+                  Mandiri membuat aplikasi PPDB, keuangan, akademik, absensi, hingga website lembaga
+                  sendiri tanpa bergantung pada vendor mahal.
+                </p>
+              </div>
+              <div className="p-6 sm:p-7">
+                <p className="font-mono text-xs font-semibold text-[#10B981] tabular-nums">03</p>
+                <h3 className="mt-2 font-display text-lg font-bold text-[#F8FAFC]">
+                  Buka Peluang Penghasilan Baru
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#94A3B8]">
+                  Setelah pelatihan, Anda mampu membuat dan menjual aplikasi siap pakai maupun jasa
+                  pembuatan sistem digital kepada sekolah, pesantren, dan instansi lain.
                 </p>
               </div>
             </div>
@@ -417,13 +523,15 @@ export function LandingPage({ navigate }: LandingPageProps) {
         </section>
 
         {/* ===================================================================
-            C. TENTANG PROGRAM
+            C. KATALOG & DETAIL PROGRAM PELATIHAN
            =================================================================== */}
         <section id="program" className="border-b border-slate-800/80 bg-[#0F172A]/40 py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12">
               <div className="lg:col-span-7">
-                <p className="text-xs font-medium tracking-wide text-[#22D3EE]">Tentang Program</p>
+                <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
+                  {programs.length > 1 ? 'Katalog Program Pelatihan SAKITA' : 'Tentang Program'}
+                </p>
                 <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
                   Bukan Sekadar Belajar AI. Saatnya Menciptakan Solusi Nyata.
                 </h2>
@@ -434,9 +542,19 @@ export function LandingPage({ navigate }: LandingPageProps) {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-[#0F172A] p-7 lg:col-span-5">
-                <p className="font-mono text-xs text-[#22D3EE]">{activeProgram.batchLabel}</p>
-                <h3 className="mt-2 font-display text-xl font-bold uppercase tracking-tight text-[#F8FAFC]">
+              <div className="rounded-2xl border border-[#22D3EE]/30 bg-[#0F172A] p-7 lg:col-span-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-xs text-[#22D3EE]">{activeProgram.batchLabel}</p>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyProgramLink(activeProgram)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#94A3B8] transition-colors hover:text-[#22D3EE] whitespace-nowrap shrink-0"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Salin Link</span>
+                  </button>
+                </div>
+                <h3 className="mt-2 font-display text-xl font-bold tracking-tight text-[#F8FAFC]">
                   {activeProgram.name}
                 </h3>
                 <p className="mt-3 text-sm leading-relaxed text-[#94A3B8]">
@@ -449,35 +567,137 @@ export function LandingPage({ navigate }: LandingPageProps) {
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <span className="text-[#94A3B8]">Fokus Praktik</span>
                   <span className="font-semibold text-[#F8FAFC]">
-                    {activeProgram.projectCount} Proyek Aplikasi Digital
+                    {moduleCount} Materi & Proyek Praktik
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="text-[#94A3B8]">Investasi</span>
+                  <span className="font-mono font-semibold text-[#22D3EE] tabular-nums">
+                    {formatRupiah(activeProgram.price)}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Multi-program selector if admin added more programs */}
+            {/* Automatic Multi-Training Catalog Grid (Scales seamlessly for 1, 2, 3, or 20+ trainings) */}
             {programs.length > 1 && (
-              <div className="mt-10 border-t border-slate-800 pt-8">
-                <p className="text-xs font-medium text-[#94A3B8]">Pilih Program / Angkatan Tersedia</p>
-                <div className="mt-3 flex flex-wrap gap-2.5">
+              <div className="mt-14 border-t border-slate-800 pt-10">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
+                      Pilihan Pelatihan Aktif ({programs.length} Program)
+                    </p>
+                    <h3 className="mt-1.5 font-display text-2xl font-bold text-[#F8FAFC]">
+                      Pilih Program Pelatihan yang Sesuai Kebutuhan Lembaga Anda
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[#94A3B8]">
+                    Klik &ldquo;Lihat Detail&rdquo; untuk menampilkan kurikulum, jadwal, dan fasilitas lengkap program tersebut.
+                  </p>
+                </div>
+
+                <div className="mt-7 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
                   {programs.map((prog) => {
-                    const active = prog.id === activeProgram.id;
+                    const isSelected = prog.id === activeProgram.id;
+                    const progFull =
+                      computeRemainingSeats(prog.quota, prog.confirmedCount, prog.reservedCount) <= 0;
+                    const progClosed = prog.status !== 'open';
+                    const progModules = prog.curriculum?.length || prog.projectCount;
                     return (
-                      <button
+                      <article
                         key={prog.id}
-                        type="button"
-                        onClick={() => setSelectedProgramId(prog.id)}
-                        className={`rounded-xl border px-4 py-2.5 text-left text-sm transition-colors ${
-                          active
-                            ? 'border-[#22D3EE] bg-[#22D3EE]/10 text-[#F8FAFC]'
-                            : 'border-slate-800 bg-[#0F172A] text-[#94A3B8] hover:border-slate-700 hover:text-[#F8FAFC]'
+                        className={`flex flex-col justify-between rounded-2xl border p-6 transition-colors ${
+                          isSelected
+                            ? 'border-[#22D3EE] bg-[#0F172A]'
+                            : 'border-slate-800 bg-[#080F1D]/80 hover:border-slate-700'
                         }`}
                       >
-                        <span className="block font-semibold">{prog.name}</span>
-                        <span className="mt-0.5 block text-xs text-[#94A3B8]">
-                          {prog.dateLabel} · {prog.location}
-                        </span>
-                      </button>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#94A3B8]">
+                            <span className="font-mono text-[#22D3EE]">{prog.batchLabel}</span>
+                            <span aria-hidden="true">·</span>
+                            <span
+                              className={`font-medium ${
+                                progClosed || progFull ? 'text-amber-400' : 'text-[#10B981]'
+                              }`}
+                            >
+                              {progClosed
+                                ? 'Ditutup'
+                                : progFull
+                                  ? 'Daftar Tunggu'
+                                  : 'Pendaftaran Dibuka'}
+                            </span>
+                            {isSelected && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-semibold text-[#F8FAFC]">Sedang Dilihat</span>
+                              </>
+                            )}
+                          </div>
+
+                          <h4 className="mt-3 font-display text-lg font-bold leading-snug text-[#F8FAFC]">
+                            {prog.name}
+                          </h4>
+
+                          <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-[#94A3B8]">
+                            {prog.description}
+                          </p>
+
+                          <dl className="mt-5 space-y-2 border-t border-slate-800/80 pt-4 text-xs text-[#94A3B8]">
+                            <div className="flex items-center justify-between gap-2">
+                              <dt>Jadwal</dt>
+                              <dd className="font-medium text-[#F8FAFC] text-right">{prog.dateLabel}</dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <dt>Durasi</dt>
+                              <dd className="font-medium text-[#F8FAFC] text-right">{prog.durationLabel}</dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <dt>Lokasi</dt>
+                              <dd className="font-medium text-[#F8FAFC] text-right truncate max-w-[65%]">
+                                {prog.location}
+                              </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <dt>Kurikulum</dt>
+                              <dd className="font-medium text-[#F8FAFC] tabular-nums">
+                                {progModules} Materi Praktik
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+
+                        <div className="mt-6 border-t border-slate-800/80 pt-4">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-xs text-[#94A3B8]">Investasi</span>
+                            <span className="font-mono text-lg font-bold text-[#F8FAFC] tabular-nums">
+                              {formatRupiah(prog.price)}
+                            </span>
+                          </div>
+                          <div className="mt-4 flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => selectProgram(prog, true)}
+                              className={`inline-flex h-10 flex-1 items-center justify-center rounded-lg border px-3 text-xs font-semibold transition-colors whitespace-nowrap ${
+                                isSelected
+                                  ? 'border-[#22D3EE]/60 bg-[#22D3EE]/10 text-[#22D3EE]'
+                                  : 'border-slate-700 bg-[#0F172A] text-[#F8FAFC] hover:border-slate-500'
+                              }`}
+                            >
+                              {isSelected ? 'Sedang Dibuka' : 'Lihat Detail'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={progClosed}
+                              onClick={() => goToRegister(prog.id)}
+                              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#22D3EE] px-3 text-xs font-semibold text-[#080F1D] transition-colors hover:bg-[#22D3EE]/90 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
+                            >
+                              <span>{progClosed ? 'Ditutup' : progFull ? 'Daftar Tunggu' : 'Daftar'}</span>
+                              {!progClosed && <ArrowRight className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
@@ -487,18 +707,20 @@ export function LandingPage({ navigate }: LandingPageProps) {
         </section>
 
         {/* ===================================================================
-            D. 10 PROYEK APLIKASI DIGITAL
+            D. MATERI & PROYEK PRAKTIK (100% Dynamic per Program)
            =================================================================== */}
         <section id="materi" className="border-b border-slate-800/80 py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl">
-              <p className="text-xs font-medium tracking-wide text-[#22D3EE]">Kurikulum Praktik</p>
+              <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
+                Kurikulum Praktik · {activeProgram.name}
+              </p>
               <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
-                10 Proyek Aplikasi Digital yang Dipraktikkan
+                {moduleCount} Materi & Proyek Praktik yang Dipelajari
               </h2>
               <p className="mt-4 text-base leading-relaxed text-[#94A3B8]">
-                Setiap modul dirancang langsung dari kebutuhan operasional nyata sekolah dan pesantren
-                di Indonesia.
+                Setiap modul dirancang agar peserta langsung mempraktikkan solusi nyata sesuai
+                kebutuhan program {activeProgram.name}.
               </p>
             </div>
 
@@ -554,7 +776,7 @@ export function LandingPage({ navigate }: LandingPageProps) {
             </div>
 
             <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {TARGET_AUDIENCE.map((item) => (
+              {targetAudience.map((item) => (
                 <div
                   key={item.role}
                   className="rounded-xl border border-slate-800 bg-[#0F172A]/80 p-6"
@@ -687,14 +909,26 @@ export function LandingPage({ navigate }: LandingPageProps) {
                       {settings.hotelGallery.map((photo, idx) => (
                         <figure
                           key={`${photo.url}-${idx}`}
-                          className="overflow-hidden rounded-xl border border-slate-800 bg-[#080F1D]"
+                          className="group overflow-hidden rounded-xl border border-slate-800 bg-[#080F1D] transition-colors hover:border-[#22D3EE]/50"
                         >
-                          <img
-                            src={photo.url}
-                            alt={photo.caption || `Foto ${activeProgram.location}`}
-                            referrerPolicy="no-referrer"
-                            className="aspect-[4/3] w-full object-cover"
-                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewPhoto({
+                                url: photo.url,
+                                caption: photo.caption || `Foto ${activeProgram.location}`,
+                              })
+                            }
+                            aria-label={`Perbesar ${photo.caption || `Foto ${activeProgram.location}`}`}
+                            className="block w-full overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22D3EE]"
+                          >
+                            <img
+                              src={photo.url}
+                              alt={photo.caption || `Foto ${activeProgram.location}`}
+                              referrerPolicy="no-referrer"
+                              className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                            />
+                          </button>
                           {photo.caption && (
                             <figcaption className="px-3 py-2 text-xs text-[#94A3B8]">
                               {photo.caption}
@@ -705,7 +939,7 @@ export function LandingPage({ navigate }: LandingPageProps) {
                     </div>
                   ) : (
                     <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {['Ruang Pelatihan & Auditorium', 'Akomodasi Kamar Peserta', 'Area Diskusi & Kolaborasi', 'Fasilitas Hotel Grand Makmur'].map(
+                      {['Ruang Pelatihan & Praktik', 'Area Diskusi & Kolaborasi', 'Suasana Sesi Pendampingan', `Fasilitas ${activeProgram.location}`].map(
                         (slotLabel) => (
                           <div
                             key={slotLabel}
@@ -724,7 +958,7 @@ export function LandingPage({ navigate }: LandingPageProps) {
                 </div>
 
                 <p className="mt-5 border-t border-slate-800 pt-4 text-xs leading-relaxed text-[#94A3B8]">
-                  Seluruh dokumentasi ruang pelatihan dan akomodasi Hotel Grand Makmur, Jambi
+                  Seluruh dokumentasi ruang pelatihan dan fasilitas lokasi {activeProgram.location}{' '}
                   diunggah langsung oleh tim administrasi Sekolah AI Kita.
                 </p>
               </div>
@@ -758,10 +992,10 @@ export function LandingPage({ navigate }: LandingPageProps) {
                       <span className="text-sm text-[#94A3B8]">/ peserta</span>
                     </div>
 
-                    {/* Actual Database Quota Display */}
+                    {/* General Registration Status (Live quota & payment counts are admin-only) */}
                     <div className="mt-6 rounded-xl border border-slate-800 bg-[#080F1D] p-4">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#94A3B8]">Status Kuota Aktual</span>
+                        <span className="text-[#94A3B8]">Status Pendaftaran</span>
                         <span
                           className={`font-semibold ${
                             isProgramClosed || isProgramFull ? 'text-amber-400' : 'text-[#10B981]'
@@ -770,34 +1004,14 @@ export function LandingPage({ navigate }: LandingPageProps) {
                           {isProgramClosed
                             ? 'Pendaftaran Ditutup'
                             : isProgramFull
-                              ? 'Pendaftaran Penuh'
-                              : `Tersedia ${remainingSeats} dari ${activeProgram.quota} kursi`}
+                              ? 'Pendaftaran Penuh (Daftar Tunggu)'
+                              : 'Pendaftaran Dibuka'}
                         </span>
                       </div>
-                      <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-[#22D3EE] to-[#6366F1] transition-all duration-300"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              Math.round(
-                                ((activeProgram.confirmedCount + activeProgram.reservedCount) /
-                                  Math.max(1, activeProgram.quota)) *
-                                  100,
-                              ),
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-[#94A3B8] tabular-nums">
-                        <span>Terverifikasi Lunas: {activeProgram.confirmedCount}</span>
-                        <span>Reservasi Menunggu: {activeProgram.reservedCount}</span>
-                      </div>
-                      {!hasLiveDbProgram && (
-                        <p className="mt-2 text-[11px] text-slate-500">
-                          Menampilkan kuota awal program sebelum sinkronisasi admin pertama.
-                        </p>
-                      )}
+                      <p className="mt-2.5 text-[11px] leading-relaxed text-[#94A3B8]">
+                        Kelas eksklusif dengan kuota terbatas maksimal {activeProgram.quota} peserta.
+                        Informasi ketersediaan dan verifikasi peserta dikelola langsung oleh admin SAKITA.
+                      </p>
                     </div>
                   </div>
 
@@ -901,12 +1115,16 @@ export function LandingPage({ navigate }: LandingPageProps) {
         <section className="py-20 lg:py-24">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#6366F1]/15 p-8 text-center sm:p-14">
-              <h2 className="mx-auto max-w-3xl font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
-                Jangan Hanya Menjadi Pengguna Teknologi. Jadilah Pencipta Solusi.
+              <p className="font-mono text-xs font-medium tracking-wide text-[#22D3EE]">
+                Belajar AI · Bangun Aplikasi Sendiri · Buka Peluang Penghasilan Baru
+              </p>
+              <h2 className="mx-auto mt-3 max-w-3xl font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
+                Jangan Hanya Jadi Pengguna Teknologi. Buat Aplikasi Sendiri dan Ciptakan Peluang Baru.
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-[#94A3B8]">
-                Di era AI, kemajuan lembaga pendidikan tidak selalu ditentukan oleh besarnya anggaran,
-                tetapi juga oleh kemampuan pengelolanya untuk belajar dan beradaptasi.
+                Miliki keterampilan nyata di era AI—mulai dari membangun sistem digital untuk lembaga
+                Anda sendiri hingga mampu membuat dan menjual aplikasi siap pakai sebagai sumber
+                penghasilan baru.
               </p>
 
               <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
@@ -925,7 +1143,7 @@ export function LandingPage({ navigate }: LandingPageProps) {
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#080F1D] px-6 text-sm font-semibold text-[#F8FAFC] transition-colors hover:border-[#10B981]/60 hover:text-[#10B981] whitespace-nowrap shrink-0"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  <span>WhatsApp {settings.whatsappNumber || '0857-6942-7335'}</span>
+                  <span>WhatsApp {settings.whatsappNumber || '0851-2163-4560'}</span>
                 </a>
               </div>
             </div>
@@ -952,7 +1170,7 @@ export function LandingPage({ navigate }: LandingPageProps) {
                   rel="noopener noreferrer"
                   className="text-[#94A3B8] hover:text-[#22D3EE]"
                 >
-                  {settings.whatsappNumber || '0857-6942-7335'}
+                  {settings.whatsappNumber || '0851-2163-4560'}
                 </a>
               </p>
             </div>
@@ -1024,6 +1242,42 @@ export function LandingPage({ navigate }: LandingPageProps) {
         content={settings.termsConditions}
         onClose={() => setLegalDialog(null)}
       />
+
+      {/* Hotel Photo Lightbox */}
+      {previewPhoto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewPhoto.caption}
+          onClick={() => setPreviewPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#080F1D]/90 p-4 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-[#0F172A] shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewPhoto(null)}
+              aria-label="Tutup pratinjau foto"
+              className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-[#080F1D]/90 text-[#F8FAFC] transition-colors hover:border-[#22D3EE] hover:text-[#22D3EE]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="flex max-h-[78vh] items-center justify-center bg-[#080F1D]">
+              <img
+                src={previewPhoto.url}
+                alt={previewPhoto.caption}
+                referrerPolicy="no-referrer"
+                className="max-h-[78vh] w-auto max-w-full object-contain"
+              />
+            </div>
+            <div className="border-t border-slate-800 px-5 py-3.5 text-sm font-medium text-[#F8FAFC]">
+              {previewPhoto.caption}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

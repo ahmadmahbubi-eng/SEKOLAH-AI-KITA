@@ -132,7 +132,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         setPrograms(openProgs);
 
         const preferred =
-          openProgs.find((p) => p.id === initialProgramId) ||
+          openProgs.find((p) => p.id === initialProgramId || p.slug === initialProgramId) ||
           openProgs.find((p) => p.isFeatured) ||
           openProgs[0];
         if (preferred) {
@@ -179,7 +179,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     : 0;
   const isFull = activeProgram ? remainingSeats <= 0 : false;
   const waAdminLink = toWhatsappLink(
-    settings.whatsappNumber || '085769427335',
+    settings.whatsappNumber || '085121634560',
     `Halo Admin SAKITA, saya membutuhkan bantuan pendaftaran${createdTicket ? ` (No. Registrasi: ${createdTicket.registrationNumber})` : ''}.`,
   );
 
@@ -188,7 +188,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     if (biodata.fullName.trim().length < 2) errors.fullName = 'Nama lengkap beserta gelar wajib diisi.';
     const normalizedWa = normalizeWhatsappID(biodata.whatsapp);
     if (!/^62[0-9]{8,15}$/.test(normalizedWa)) {
-      errors.whatsapp = 'Masukkan nomor WhatsApp Indonesia yang aktif (contoh: 085769427335).';
+      errors.whatsapp = 'Masukkan nomor WhatsApp Indonesia yang aktif (contoh: 085121634560).';
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(biodata.email.trim())) {
       errors.email = 'Masukkan alamat email aktif yang valid.';
@@ -481,7 +481,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                 <p className={`text-xs font-medium ${isFull ? 'text-amber-400' : 'text-[#10B981]'}`}>
                   {isFull
                     ? 'Pendaftaran Penuh · Mode Daftar Tunggu'
-                    : `Sisa ${remainingSeats} dari ${activeProgram.quota} kursi`}
+                    : 'Pendaftaran Dibuka · Kuota Terbatas'}
                 </p>
               </div>
             </div>
@@ -513,7 +513,12 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                     </label>
                     <select
                       value={selectedProgramId}
-                      onChange={(e) => setSelectedProgramId(e.target.value)}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setSelectedProgramId(nextId);
+                        const nextProg = programs.find((p) => p.id === nextId);
+                        if (nextProg) setTransferAmount(String(nextProg.price));
+                      }}
                       className="mt-1.5 w-full rounded-xl border border-slate-700 bg-[#080F1D] px-4 py-3 text-sm text-[#F8FAFC] focus:border-[#22D3EE] focus:outline-none"
                     >
                       {programs.map((p) => (
@@ -572,7 +577,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                       type="tel"
                       value={biodata.whatsapp}
                       onChange={(e) => setBiodata({ ...biodata, whatsapp: e.target.value })}
-                      placeholder="0857-xxxx-xxxx"
+                      placeholder="0851-xxxx-xxxx"
                       className="mt-1.5 w-full rounded-xl border border-slate-700 bg-[#080F1D] px-4 py-3 text-sm text-[#F8FAFC] placeholder:text-slate-500 focus:border-[#22D3EE] focus:outline-none"
                     />
                     {fieldErrors.whatsapp ? (

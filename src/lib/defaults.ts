@@ -2,6 +2,7 @@ import type {
   BankSettings,
   CommunitySettings,
   FaqItem,
+  HotelPhotoItem,
   NotificationSettings,
   Program,
   ProjectItem,
@@ -123,6 +124,11 @@ export const INITIAL_FAQS: FaqItem[] = [
       'Tautan undangan Komunitas Sekolah AI Kita akan langsung terbuka pada halaman sukses pendaftaran segera setelah Anda berhasil mengunggah bukti transfer.',
   },
   {
+    question: 'Apakah setelah pelatihan saya bisa membuat dan menjual aplikasi sendiri?',
+    answer:
+      'Ya. Fokus utama pelatihan SAKITA adalah kemandirian praktik. Anda dibimbing menguasai alur perancangan hingga pembuatan aplikasi berbasis AI sehingga mampu membangun sistem untuk lembaga sendiri maupun menawarkan jasa dan menjual aplikasi digital kepada sekolah, pesantren, UMKM, atau instansi lain sebagai peluang penghasilan baru.',
+  },
+  {
     question: 'Bagaimana mengetahui status pembayaran?',
     answer:
       'Simpan tautan status pribadi dan bukti pendaftaran yang diberikan setelah mendaftar. Anda dapat memantau status verifikasi (Menunggu Verifikasi hingga Lunas) melalui halaman status peserta, dan tim admin juga akan menginformasikan setelah verifikasi selesai.',
@@ -159,18 +165,42 @@ export const DEFAULT_PROGRAM: Program = {
 export const OFFICIAL_SAKITA_LOGO =
   '/assets/aistudio/Logo_Sekolah_AI_Kita_dengan_Ikon_Buku_1abe7621.png';
 
+export const OFFICIAL_SAKITA_WHATSAPP = '0851-2163-4560';
+export const OFFICIAL_SAKITA_WHATSAPP_RAW = '085121634560';
+export const OFFICIAL_SAKITA_COMMUNITY_URL =
+  'https://chat.whatsapp.com/JSmbDkfooS1EadYZ6ngfXx';
+
+export const OFFICIAL_HOTEL_GALLERY: HotelPhotoItem[] = [
+  {
+    url: '/assets/aistudio/PHOTO-2026-11-19-10-50-09_acd15e60.jpg',
+    caption: 'Ruang Pelatihan Utama — Hotel Grand Makmur, Jambi',
+  },
+  {
+    url: '/assets/aistudio/d5ced111992a35765af48f1e5f11f16a_c491e5c8.jpg',
+    caption: 'Kamar Akomodasi Peserta — Hotel Grand Makmur, Jambi',
+  },
+  {
+    url: '/assets/aistudio/87efc704f682a14b2d84e2e0972ae18e_944e7013.jpg',
+    caption: 'Restoran & Area Makan Peserta — Hotel Grand Makmur, Jambi',
+  },
+  {
+    url: '/assets/aistudio/0222o12000mwfyd963445_W_750_1624_R5_21faca3c.jpg',
+    caption: 'Fasilitas Kolam Renang — Hotel Grand Makmur, Jambi',
+  },
+];
+
 export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
   brandName: 'SAKITA',
   brandSubtitle: 'SEKOLAH AI KITA',
-  tagline: 'Belajar AI, Berkarya untuk Masa Depan.',
+  tagline: 'Belajar AI, Bangun Aplikasi Sendiri, dan Buka Peluang Penghasilan Baru.',
   logoUrl: OFFICIAL_SAKITA_LOGO,
   heroEyebrow: 'INTENSIVE AI BOOTCAMP 2026',
   heroHeadline: 'Saatnya Sekolah dan Pesantren Anda Naik Kelas.',
-  heroSubheadline: 'Bangun Sistem Digital Sendiri dengan AI. Tanpa Harus Bisa Coding.',
+  heroSubheadline: 'Belajar AI, Bangun Aplikasi Sendiri, dan Buka Peluang Penghasilan Baru.',
   heroDescription:
-    'Bayangkan sekolah atau pesantren Anda memiliki aplikasi pendaftaran siswa, pembayaran SPP, absensi, rapor, laporan keuangan, hingga sistem perkembangan hafalan santri yang dibangun sendiri dengan bantuan AI. Kini, Anda tidak harus menjadi programmer untuk mulai menciptakan solusi digital bagi lembaga Anda.',
+    'Tanpa harus bisa coding, Anda dibimbing praktik langsung membangun sistem digital untuk sekolah, pesantren, dan lembaga—mulai dari PPDB, SPP, absensi, rapor, hingga tahfidz. Setelah pelatihan, Anda bukan hanya mandiri membangun aplikasi sendiri, tetapi juga mampu membuat dan menjual aplikasi digital sebagai peluang penghasilan baru.',
   bannerUrl: '',
-  whatsappNumber: '0857-6942-7335',
+  whatsappNumber: OFFICIAL_SAKITA_WHATSAPP,
   contactEmail: '',
   privacyPolicy:
     'Sekolah AI Kita (SAKITA) menghormati privasi data setiap calon peserta. Data biodata, kontak WhatsApp, email, informasi lembaga, dan bukti pembayaran yang Anda kirimkan hanya digunakan untuk keperluan administrasi pendaftaran, verifikasi pembayaran, komunikasi persiapan pelatihan, serta penerbitan e-tiket dan sertifikat pelatihan.\n\nData peserta disimpan dengan akses terbatas khusus administrator berwenang dan tidak diperjualbelikan atau dibagikan kepada pihak ketiga tanpa persetujuan peserta. Bukti transfer disimpan secara privat dan tunduk pada kebijakan retensi data internal setelah program selesai.',
@@ -184,7 +214,7 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
     experience: '',
     bio: '',
   },
-  hotelGallery: [],
+  hotelGallery: OFFICIAL_HOTEL_GALLERY,
   projects: INITIAL_PROJECTS,
   facilities: INITIAL_FACILITIES,
   faqs: INITIAL_FAQS,
@@ -201,15 +231,15 @@ export const DEFAULT_BANK_SETTINGS: BankSettings = {
 
 export const DEFAULT_COMMUNITY_SETTINGS: CommunitySettings = {
   communityName: 'Komunitas Sekolah AI Kita (SAKITA)',
-  whatsappInviteUrl: '',
+  whatsappInviteUrl: OFFICIAL_SAKITA_COMMUNITY_URL,
   description:
     'Bergabunglah dengan Komunitas Sekolah AI Kita untuk mendapatkan informasi persiapan pelatihan, berdiskusi, dan terhubung dengan peserta lainnya.',
-  isActive: false,
+  isActive: true,
 };
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   adminEmail: 'ahmadmahbubi@gmail.com',
-  adminWhatsapp: '085769427335',
+  adminWhatsapp: OFFICIAL_SAKITA_WHATSAPP_RAW,
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
     'Halo {{nama}},\n\nSelamat datang di keluarga besar Sekolah AI Kita (SAKITA).\nNomor Registrasi: {{registrasi}}\nProgram: {{program}}\nStatus Pembayaran: Menunggu Verifikasi\n\nAkses Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nTim kami akan segera memverifikasi bukti pembayaran Anda.',

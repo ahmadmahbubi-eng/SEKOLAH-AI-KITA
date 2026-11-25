@@ -27,7 +27,7 @@ export function formatWhatsappDisplay(normalized: string): string {
 }
 
 export function toWhatsappLink(rawPhone: string, message?: string): string {
-  const digits = normalizeWhatsappID(rawPhone || '085769427335');
+  const digits = normalizeWhatsappID(rawPhone || '085121634560');
   const base = `https://wa.me/${digits}`;
   if (message) {
     return `${base}?text=${encodeURIComponent(message)}`;

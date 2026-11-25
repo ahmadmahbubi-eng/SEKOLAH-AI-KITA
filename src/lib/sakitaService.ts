@@ -18,6 +18,7 @@ import {
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_PROGRAM,
   DEFAULT_WEBSITE_SETTINGS,
+  OFFICIAL_HOTEL_GALLERY,
 } from './defaults';
 import type {
   AdminUserRecord,
@@ -62,12 +63,33 @@ export async function fetchPublicPrograms(): Promise<Program[]> {
   }
 }
 
+const LEGACY_WHATSAPP_DIGITS = new Set(['085769427335', '6285769427335']);
+const LEGACY_HERO_SUBHEADLINE = 'Bangun Sistem Digital Sendiri dengan AI. Tanpa Harus Bisa Coding.';
+
+function isLegacyWhatsappNumber(val?: string): boolean {
+  if (!val) return false;
+  const digits = val.replace(/\D/g, '');
+  return LEGACY_WHATSAPP_DIGITS.has(digits);
+}
+
 export async function fetchWebsiteSettings(): Promise<WebsiteSettings> {
   const path = 'website_settings/default';
   try {
     const snap = await getDoc(doc(db, 'website_settings', 'default'));
     if (!snap.exists()) return DEFAULT_WEBSITE_SETTINGS;
-    return { ...DEFAULT_WEBSITE_SETTINGS, ...(snap.data() as WebsiteSettings) };
+    const merged = { ...DEFAULT_WEBSITE_SETTINGS, ...(snap.data() as WebsiteSettings) };
+    if (isLegacyWhatsappNumber(merged.whatsappNumber)) {
+      merged.whatsappNumber = DEFAULT_WEBSITE_SETTINGS.whatsappNumber;
+    }
+    if (merged.heroSubheadline === LEGACY_HERO_SUBHEADLINE) {
+      merged.heroSubheadline = DEFAULT_WEBSITE_SETTINGS.heroSubheadline;
+      merged.heroDescription = DEFAULT_WEBSITE_SETTINGS.heroDescription;
+      merged.tagline = DEFAULT_WEBSITE_SETTINGS.tagline;
+    }
+    if (!Array.isArray(merged.hotelGallery) || merged.hotelGallery.length === 0) {
+      merged.hotelGallery = OFFICIAL_HOTEL_GALLERY;
+    }
+    return merged;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
   }
@@ -558,6 +580,42 @@ export async function bootstrapAdminEnvironment(): Promise<void> {
       const snap = await getDoc(ref);
       if (!snap.exists()) {
         await setDoc(ref, seed.data);
+      } else {
+        const existingData = snap.data() as Record<string, unknown>;
+        if (seed.col === 'website_settings') {
+          const patch: Record<string, unknown> = {};
+          if (isLegacyWhatsappNumber(String(existingData.whatsappNumber || ''))) {
+            patch.whatsappNumber = DEFAULT_WEBSITE_SETTINGS.whatsappNumber;
+          }
+          if (String(existingData.heroSubheadline || '') === LEGACY_HERO_SUBHEADLINE) {
+            patch.heroSubheadline = DEFAULT_WEBSITE_SETTINGS.heroSubheadline;
+            patch.heroDescription = DEFAULT_WEBSITE_SETTINGS.heroDescription;
+            patch.tagline = DEFAULT_WEBSITE_SETTINGS.tagline;
+          }
+          if (!Array.isArray(existingData.hotelGallery) || existingData.hotelGallery.length === 0) {
+            patch.hotelGallery = OFFICIAL_HOTEL_GALLERY;
+          }
+          if (Object.keys(patch).length > 0) {
+            await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+          }
+        } else if (
+          seed.col === 'notification_settings' &&
+          isLegacyWhatsappNumber(String(existingData.adminWhatsapp || ''))
+        ) {
+          await updateDoc(ref, {
+            adminWhatsapp: DEFAULT_NOTIFICATION_SETTINGS.adminWhatsapp,
+            updatedAt: serverTimestamp(),
+          });
+        } else if (
+          seed.col === 'community_settings' &&
+          !String(existingData.whatsappInviteUrl || '').trim()
+        ) {
+          await updateDoc(ref, {
+            whatsappInviteUrl: DEFAULT_COMMUNITY_SETTINGS.whatsappInviteUrl,
+            isActive: true,
+            updatedAt: serverTimestamp(),
+          });
+        }
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `${seed.col}/default`);
@@ -821,37 +879,103 @@ export async function cancelRegistrationAction(registration: Registration): Prom
   );
 }
 
-export async function saveProgram(program: Program, isNew: boolean): Promise<void> {
+export async function saveProgram(
+  program: Program,
+  isNew: boolean,
+  allPrograms?: Program[],
+): Promise<void> {
   const ref = doc(db, 'programs', program.id);
+  const cleanSlug =
+    program.slug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 100) || program.id.toLowerCase();
+
+  const cleanFacilities = (program.facilities || [])
+    .map((f) => f.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+
+  const cleanCurriculum = (program.curriculum || [])
+    .filter((item) => item.title.trim().length > 0)
+    .slice(0, 30)
+    .map((item, idx) => ({
+      number: (item.number || String(idx + 1).padStart(2, '0')).trim().slice(0, 10),
+      icon: (item.icon || 'LayoutDashboard').trim().slice(0, 40),
+      title: item.title.trim().slice(0, 160),
+      description: item.description.trim().slice(0, 600),
+      benefit: item.benefit.trim().slice(0, 400),
+    }));
+
+  const cleanTargetAudience = (program.targetAudience || [])
+    .filter((item) => item.role.trim().length > 0)
+    .slice(0, 12)
+    .map((item) => ({
+      role: item.role.trim().slice(0, 120),
+      desc: item.desc.trim().slice(0, 400),
+    }));
+
+  const payload = {
+    slug: cleanSlug.length >= 3 ? cleanSlug : `${cleanSlug}-prog`,
+    name: program.name.trim().slice(0, 180),
+    batchLabel: program.batchLabel.trim().slice(0, 80),
+    description: program.description.trim().slice(0, 2000),
+    dateLabel: program.dateLabel.trim().slice(0, 100),
+    startDateIso: program.startDateIso.trim().slice(0, 40),
+    endDateIso: program.endDateIso.trim().slice(0, 40),
+    durationLabel: program.durationLabel.trim().slice(0, 60),
+    location: program.location.trim().slice(0, 200),
+    price: Math.max(0, Math.min(500000000, Number(program.price) || 0)),
+    quota: Math.max(1, Math.min(5000, Number(program.quota) || 1)),
+    reservationHours: Math.max(1, Math.min(720, Number(program.reservationHours) || 48)),
+    projectCount: Math.max(
+      1,
+      Math.min(100, Number(program.projectCount) || cleanCurriculum.length || 1),
+    ),
+    targetRevenue: Math.max(0, Number(program.targetRevenue) || 0),
+    status: program.status,
+    isFeatured: Boolean(program.isFeatured),
+    facilities: cleanFacilities,
+    curriculum: cleanCurriculum,
+    bannerUrl: (program.bannerUrl || '').trim().slice(0, 500),
+    headline: (program.headline || '').trim().slice(0, 240),
+    subheadline: (program.subheadline || '').trim().slice(0, 300),
+    targetAudience: cleanTargetAudience,
+  };
+
   try {
     if (isNew) {
       await setDoc(ref, {
-        ...program,
+        id: program.id,
+        ...payload,
+        confirmedCount: 0,
+        reservedCount: 0,
+        waitlistCount: 0,
+        registrationSeq: 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     } else {
       await updateDoc(ref, {
-        slug: program.slug,
-        name: program.name,
-        batchLabel: program.batchLabel,
-        description: program.description,
-        dateLabel: program.dateLabel,
-        startDateIso: program.startDateIso,
-        endDateIso: program.endDateIso,
-        durationLabel: program.durationLabel,
-        location: program.location,
-        price: Number(program.price),
-        quota: Number(program.quota),
-        reservationHours: Number(program.reservationHours),
-        projectCount: Number(program.projectCount),
-        targetRevenue: Number(program.targetRevenue),
-        status: program.status,
-        isFeatured: Boolean(program.isFeatured),
-        facilities: program.facilities,
-        curriculum: program.curriculum,
+        ...payload,
         updatedAt: serverTimestamp(),
       });
+    }
+
+    if (payload.isFeatured && allPrograms && allPrograms.length > 0) {
+      const othersToUnfeature = allPrograms.filter(
+        (other) => other.id !== program.id && other.isFeatured,
+      );
+      await Promise.all(
+        othersToUnfeature.map((other) =>
+          updateDoc(doc(db, 'programs', other.id), {
+            isFeatured: false,
+            updatedAt: serverTimestamp(),
+          }),
+        ),
+      );
     }
   } catch (error) {
     handleFirestoreError(error, isNew ? OperationType.CREATE : OperationType.UPDATE, `programs/${program.id}`);
@@ -861,7 +985,7 @@ export async function saveProgram(program: Program, isNew: boolean): Promise<voi
     isNew ? 'BUAT_PROGRAM' : 'EDIT_PROGRAM',
     'program',
     program.id,
-    `${isNew ? 'Membuat' : 'Memperbarui'} program "${program.name}" (Status: ${program.status}, Kuota: ${program.quota})`,
+    `${isNew ? 'Membuat' : 'Memperbarui'} program "${payload.name}" (Slug: /program/${payload.slug}, Status: ${payload.status}, Kuota: ${payload.quota})`,
   );
 }
 

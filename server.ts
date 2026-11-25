@@ -90,18 +90,30 @@ function writeJsonFile(filePath: string, data: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
+const DEFAULT_COMMUNITY_INVITE_URL = 'https://chat.whatsapp.com/JSmbDkfooS1EadYZ6ngfXx';
+const DEFAULT_ADMIN_WHATSAPP = '6285121634560';
+
 let communityGate: CommunityGateConfig = readJsonFile<CommunityGateConfig>(COMMUNITY_FILE, {
   communityName: 'Komunitas Sekolah AI Kita (SAKITA)',
-  whatsappInviteUrl: process.env.COMMUNITY_WHATSAPP_LINK || '',
-  description: 'Ruang diskusi resmi, persiapan pelatihan, dan berbagi praktik baik pemanfaatan AI untuk sekolah dan pesantren.',
-  isActive: Boolean(process.env.COMMUNITY_WHATSAPP_LINK),
+  whatsappInviteUrl: process.env.COMMUNITY_WHATSAPP_LINK || DEFAULT_COMMUNITY_INVITE_URL,
+  description: 'Bergabunglah dengan Komunitas Sekolah AI Kita untuk mendapatkan informasi persiapan pelatihan, berdiskusi, dan terhubung dengan peserta lainnya.',
+  isActive: true,
 });
+
+if (!communityGate.whatsappInviteUrl) {
+  communityGate = {
+    ...communityGate,
+    whatsappInviteUrl: process.env.COMMUNITY_WHATSAPP_LINK || DEFAULT_COMMUNITY_INVITE_URL,
+    isActive: true,
+  };
+  writeJsonFile(COMMUNITY_FILE, communityGate);
+}
 
 let proofIndex: Record<string, ProofIndexRecord> = readJsonFile<Record<string, ProofIndexRecord>>(PROOF_INDEX_FILE, {});
 let adminEmails: string[] = readJsonFile<string[]>(ADMIN_ALLOWLIST_FILE, [INITIAL_ADMIN_EMAIL]);
 let notifRuntimeConfig: NotifRuntimeConfig = readJsonFile<NotifRuntimeConfig>(NOTIF_CONFIG_FILE, {
   adminEmail: INITIAL_ADMIN_EMAIL,
-  adminWhatsapp: '6285769427335',
+  adminWhatsapp: DEFAULT_ADMIN_WHATSAPP,
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
     'Halo {{nama}},\n\nSelamat! Pendaftaran Anda pada program {{program}} dengan nomor registrasi {{registrasi}} dan bukti transfer telah kami terima.\nStatus saat ini: Menunggu Verifikasi.\n\nAkses Komunitas Sekolah AI Kita: {{komunitas}}\n\nSalam hangat,\nTim Sekolah AI Kita (SAKITA)',
@@ -114,6 +126,14 @@ let notifRuntimeConfig: NotifRuntimeConfig = readJsonFile<NotifRuntimeConfig>(NO
   verifiedEmailTemplate:
     'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{registrasi}}) telah diverifikasi dan berstatus LUNAS.\n\nTanggal: {{tanggal}}\nLokasi: {{lokasi}}\n\nSilakan persiapkan laptop pribadi dan ikuti informasi teknis di Komunitas Sekolah AI Kita.\n\nSampai jumpa di Jambi!\nTim SAKITA',
 });
+
+if (['085769427335', '6285769427335'].includes((notifRuntimeConfig.adminWhatsapp || '').replace(/\D/g, ''))) {
+  notifRuntimeConfig = {
+    ...notifRuntimeConfig,
+    adminWhatsapp: DEFAULT_ADMIN_WHATSAPP,
+  };
+  writeJsonFile(NOTIF_CONFIG_FILE, notifRuntimeConfig);
+}
 
 // Idempotency deduplication cache for notifications (prevents double sending)
 const sentEventKeys = new Set<string>();
@@ -408,7 +428,7 @@ async function startServer() {
     }
     const normalizedWa = normalizeIndonesianPhone(whatsapp);
     if (!/^62[0-9]{8,15}$/.test(normalizedWa)) {
-      res.status(400).json({ error: 'Format nomor WhatsApp Indonesia tidak valid (contoh: 0857xxxx atau 62857xxxx).' });
+      res.status(400).json({ error: 'Format nomor WhatsApp Indonesia tidak valid (contoh: 0851xxxx atau 62851xxxx).' });
       return;
     }
     if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {

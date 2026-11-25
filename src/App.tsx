@@ -61,7 +61,13 @@ function AppRouter() {
     return <SuccessStatusPage token={token} mode="status" navigate={navigate} />;
   }
 
-  return <LandingPage navigate={navigate} />;
+  if (pathname.startsWith('/program/')) {
+    const slug = decodeURIComponent(pathname.slice('/program/'.length)).replace(/\/+$/, '');
+    return <LandingPage navigate={navigate} initialProgramSlug={slug} />;
+  }
+
+  const programQuery = url.searchParams.get('program') || undefined;
+  return <LandingPage navigate={navigate} initialProgramSlug={programQuery} />;
 }
 
 export default function App() {

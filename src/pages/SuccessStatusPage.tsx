@@ -79,7 +79,7 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
 
   const statusUrl = `${window.location.origin}/status/${encodeURIComponent(token)}`;
   const waAdminLink = toWhatsappLink(
-    settings.whatsappNumber || '085769427335',
+    settings.whatsappNumber || '085121634560',
     ticket
       ? `Halo Admin SAKITA, saya ${ticket.fullName} (No. Registrasi: ${ticket.registrationNumber}) ingin mengonfirmasi status pendaftaran saya.`
       : 'Halo Admin SAKITA, saya ingin bertanya mengenai status pendaftaran saya.',

@@ -43,6 +43,10 @@
         "isFeatured": { "type": "boolean" },
         "facilities": { "type": "array" },
         "curriculum": { "type": "array" },
+        "bannerUrl": { "type": "string", "maxLength": 500 },
+        "headline": { "type": "string", "maxLength": 240 },
+        "subheadline": { "type": "string", "maxLength": 300 },
+        "targetAudience": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

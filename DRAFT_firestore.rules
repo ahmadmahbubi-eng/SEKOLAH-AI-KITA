@@ -79,7 +79,9 @@ service cloud.firestore {
           'startDateIso', 'endDateIso', 'durationLabel', 'location',
           'price', 'quota', 'confirmedCount', 'reservedCount', 'waitlistCount',
           'registrationSeq', 'reservationHours', 'projectCount', 'targetRevenue',
-          'status', 'isFeatured', 'facilities', 'curriculum', 'createdAt', 'updatedAt'
+          'status', 'isFeatured', 'facilities', 'curriculum',
+          'bannerUrl', 'headline', 'subheadline', 'targetAudience',
+          'createdAt', 'updatedAt'
         ])
         && isValidId(data.id)
         && isValidString(data.slug, 3, 100)
@@ -106,6 +108,10 @@ service cloud.firestore {
         && (data.facilities.size() == 0 || data.facilities[0] is string)
         && data.curriculum is list && data.curriculum.size() <= 30
         && (data.curriculum.size() == 0 || data.curriculum[0] is map)
+        && (!('bannerUrl' in data) || isValidString(data.bannerUrl, 0, 500))
+        && (!('headline' in data) || isValidString(data.headline, 0, 240))
+        && (!('subheadline' in data) || isValidString(data.subheadline, 0, 300))
+        && (!('targetAudience' in data) || (data.targetAudience is list && data.targetAudience.size() <= 12 && (data.targetAudience.size() == 0 || data.targetAudience[0] is map)))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -360,7 +366,7 @@ service cloud.firestore {
     // 2. Programs (Public read for open/featured catalog, Admin full control, Atomic public sequence/seat hold)
     match /programs/{programId} {
       allow get: if isValidId(programId);
-      allow list: if resource.data.status in ['open', 'closed', 'archived'];
+      allow list: if isAdmin() || resource.data.status in ['open', 'closed', 'archived'];
       allow create: if isValidId(programId)
         && isAdmin()
         && isValidProgram(incoming())

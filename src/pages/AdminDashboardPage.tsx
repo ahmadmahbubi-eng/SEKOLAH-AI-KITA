@@ -415,7 +415,12 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
               />
             )}
 
-            {section === 'program' && <AdminPrograms programs={programs} />}
+            {section === 'program' && (
+              <AdminPrograms
+                programs={programs}
+                onPreviewProgram={(slug) => navigate(`/program/${encodeURIComponent(slug)}`)}
+              />
+            )}
 
             {section === 'website' && <AdminWebsiteCMS settings={websiteSettings} />}
 

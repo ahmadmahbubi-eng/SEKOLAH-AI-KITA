@@ -44,6 +44,11 @@ export interface MentorProfile {
   bio: string;
 }
 
+export interface TargetAudienceItem {
+  role: string;
+  desc: string;
+}
+
 export interface Program {
   id: string;
   slug: string;
@@ -68,6 +73,10 @@ export interface Program {
   isFeatured: boolean;
   facilities: string[];
   curriculum: ProjectItem[];
+  bannerUrl?: string;
+  headline?: string;
+  subheadline?: string;
+  targetAudience?: TargetAudienceItem[];
   createdAt?: Timestamp | unknown;
   updatedAt?: Timestamp | unknown;
 }
