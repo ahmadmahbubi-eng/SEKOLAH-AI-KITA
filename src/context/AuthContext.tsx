@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  type User,
+} from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 import { bootstrapAdminEnvironment } from '../lib/sakitaService';
@@ -17,6 +24,26 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function formatAuthError(err: unknown): string | null {
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code?: unknown }).code || '')
+      : '';
+  const msg = err instanceof Error ? err.message : '';
+
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request' || msg.includes('popup-closed-by-user')) {
+    return null;
+  }
+  if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'domain ini';
+    return `Domain "${host}" belum didaftarkan di Firebase Authentication. Tambahkan "${host}" di Firebase Console (project: startup-runner-v8chg) → Authentication → Settings → Authorized domains.`;
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Koneksi jaringan terganggu saat menghubungi Google. Periksa internet Anda lalu coba lagi.';
+  }
+  return `Gagal memproses login Google (${code || 'error'}). Pastikan popup diizinkan atau coba muat ulang halaman.`;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,6 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
+    void getRedirectResult(auth).catch((err) => {
+      const friendly = formatAuthError(err);
+      if (friendly) setAuthError(friendly);
+    });
+
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setAuthError(null);
@@ -96,9 +128,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthError('Akses ditolak. Akun Anda tidak memiliki peran administrator SAKITA.');
       return false;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal masuk dengan akun Google.';
-      if (!msg.includes('popup-closed-by-user')) {
-        setAuthError('Gagal memproses login Google. Pastikan popup diizinkan oleh browser Anda.');
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code || '')
+          : '';
+
+      // Automatically fall back to redirect flow when browser blocks popups (e.g., iOS Safari)
+      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return false;
+        } catch (redirectErr) {
+          const friendlyRedirect = formatAuthError(redirectErr);
+          if (friendlyRedirect) setAuthError(friendlyRedirect);
+          return false;
+        }
+      }
+
+      const friendly = formatAuthError(err);
+      if (friendly) {
+        setAuthError(friendly);
       }
       return false;
     }
