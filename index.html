@@ -22,12 +22,21 @@
       content="Kelas Intensif AI 4 hari praktik membangun 10 proyek aplikasi digital sekolah & pesantren tanpa harus bisa coding."
     />
     <meta name="theme-color" content="#080F1D" />
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-      rel="stylesheet"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -61,7 +70,12 @@
     </script>
   </head>
   <body class="bg-[#080F1D] text-[#F8FAFC] antialiased selection:bg-[#22D3EE]/25 selection:text-[#F8FAFC]">
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#080F1D;color:#94A3B8;font-family:system-ui,-apple-system,sans-serif;font-size:13px;gap:12px;">
+        <div style="font-weight:700;color:#F8FAFC;letter-spacing:0.06em;font-size:15px;">SEKOLAH AI KITA (SAKITA)</div>
+        <div>Memuat halaman...</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

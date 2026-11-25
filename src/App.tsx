@@ -1,12 +1,32 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { AdminLoginPage } from './pages/AdminLoginPage';
 import { LandingPage } from './pages/LandingPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { SuccessStatusPage } from './pages/SuccessStatusPage';
+
+const RegisterPage = lazy(() =>
+  import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })),
+);
+const SuccessStatusPage = lazy(() =>
+  import('./pages/SuccessStatusPage').then((m) => ({ default: m.SuccessStatusPage })),
+);
+const AdminLoginPage = lazy(() =>
+  import('./pages/AdminLoginPage').then((m) => ({ default: m.AdminLoginPage })),
+);
+const AdminDashboardPage = lazy(() =>
+  import('./pages/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })),
+);
+const AuthProviderLazy = lazy(() =>
+  import('./context/AuthContext').then((m) => ({ default: m.AuthProvider })),
+);
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#080F1D] text-[#F8FAFC]">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#22D3EE]/25 border-t-[#22D3EE]" />
+      <p className="mt-3 text-xs text-[#94A3B8]">Memuat halaman SAKITA...</p>
+    </div>
+  );
+}
 
 function AppRouter() {
   const [locationPath, setLocationPath] = useState<string>(
@@ -32,33 +52,55 @@ function AppRouter() {
   const pathname = url.pathname.replace(/\/+$/, '') || '/';
 
   if (pathname === '/admin/login') {
-    return <AdminLoginPage navigate={navigate} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthProviderLazy>
+          <AdminLoginPage navigate={navigate} />
+        </AuthProviderLazy>
+      </Suspense>
+    );
   }
 
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    return <AdminDashboardPage navigate={navigate} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthProviderLazy>
+          <AdminDashboardPage navigate={navigate} />
+        </AuthProviderLazy>
+      </Suspense>
+    );
   }
 
   if (pathname === '/daftar') {
     const programParam = url.searchParams.get('program') || undefined;
     const tokenParam = url.searchParams.get('token') || undefined;
     return (
-      <RegisterPage
-        navigate={navigate}
-        initialProgramId={programParam}
-        resumeToken={tokenParam}
-      />
+      <Suspense fallback={<PageLoader />}>
+        <RegisterPage
+          navigate={navigate}
+          initialProgramId={programParam}
+          resumeToken={tokenParam}
+        />
+      </Suspense>
     );
   }
 
   if (pathname.startsWith('/sukses/')) {
     const token = decodeURIComponent(pathname.slice('/sukses/'.length));
-    return <SuccessStatusPage token={token} mode="success" navigate={navigate} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SuccessStatusPage token={token} mode="success" navigate={navigate} />
+      </Suspense>
+    );
   }
 
   if (pathname.startsWith('/status/')) {
     const token = decodeURIComponent(pathname.slice('/status/'.length));
-    return <SuccessStatusPage token={token} mode="status" navigate={navigate} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SuccessStatusPage token={token} mode="status" navigate={navigate} />
+      </Suspense>
+    );
   }
 
   if (pathname.startsWith('/program/')) {
@@ -73,11 +115,9 @@ function AppRouter() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <ToastProvider>
-          <AppRouter />
-        </ToastProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <AppRouter />
+      </ToastProvider>
     </ErrorBoundary>
   );
 }

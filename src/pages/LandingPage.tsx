@@ -807,6 +807,8 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                     <img
                       src={settings.mentor.photoUrl}
                       alt={settings.mentor.name}
+                      loading="lazy"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       className="aspect-[4/4] w-full rounded-xl object-cover border border-slate-800"
                     />
@@ -925,6 +927,8 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                             <img
                               src={photo.url}
                               alt={photo.caption || `Foto ${activeProgram.location}`}
+                              loading="lazy"
+                              decoding="async"
                               referrerPolicy="no-referrer"
                               className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                             />

@@ -7,9 +7,12 @@ interface BrandMarkProps {
   variant?: 'dark' | 'light';
 }
 
+const WEB_OPTIMIZED_SAKITA_LOGO = '/assets/sakita-logo-web.png';
+
 export function BrandMark({ logoUrl, brandName = 'SAKITA', variant = 'dark' }: BrandMarkProps) {
   const [imgError, setImgError] = useState(false);
-  const resolvedLogo = logoUrl?.trim() || OFFICIAL_SAKITA_LOGO;
+  const rawLogo = logoUrl?.trim() || OFFICIAL_SAKITA_LOGO;
+  const resolvedLogo = rawLogo === OFFICIAL_SAKITA_LOGO ? WEB_OPTIMIZED_SAKITA_LOGO : rawLogo;
 
   if (resolvedLogo && !imgError) {
     return (
@@ -22,6 +25,9 @@ export function BrandMark({ logoUrl, brandName = 'SAKITA', variant = 'dark' }: B
           <img
             src={resolvedLogo}
             alt={brandName}
+            width={108}
+            height={36}
+            decoding="async"
             referrerPolicy="no-referrer"
             onError={() => setImgError(true)}
             className="h-9 w-auto max-w-[160px] object-contain"
