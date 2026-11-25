@@ -15,6 +15,7 @@ import { db } from '../../lib/firebase';
 import { formatTimestampID } from '../../lib/format';
 import {
   getAdminAuthHeaders,
+  isJsonResponse,
   saveBankSettings,
   saveCommunitySettings,
   saveNotificationSettings,
@@ -68,7 +69,7 @@ export function AdminSettingsPanels({
       try {
         const headers = await getAdminAuthHeaders();
         const resp = await fetch('/api/notifications/status', { headers });
-        if (resp.ok && active) {
+        if (resp.ok && isJsonResponse(resp) && active) {
           const data = (await resp.json()) as typeof integrationStatus;
           setIntegrationStatus(data);
         }
@@ -155,6 +156,14 @@ export function AdminSettingsPanels({
           payloadSummary: log.payloadSummary,
         }),
       });
+      if (!isJsonResponse(resp)) {
+        toast(
+          'info',
+          'Server notifikasi otomatis belum aktif',
+          'Pengiriman ulang otomatis memerlukan server API aktif. Anda dapat menghubungi peserta langsung melalui WhatsApp.',
+        );
+        return;
+      }
       const outcome = (await resp.json()) as {
         status: 'sent' | 'failed' | 'unconfigured';
         attempts: number;

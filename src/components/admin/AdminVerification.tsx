@@ -16,7 +16,7 @@ import {
   formatWhatsappDisplay,
   getPaymentStatusMeta,
 } from '../../lib/format';
-import { getAdminAuthHeaders, verifyPaymentAction } from '../../lib/sakitaService';
+import { fetchAdminProofObjectUrl, verifyPaymentAction } from '../../lib/sakitaService';
 import type { Payment, Program, Registration } from '../../types';
 
 interface AdminVerificationProps {
@@ -60,11 +60,7 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
       if (!selectedPayment?.proofFilePath) return;
       setLoadingProof(true);
       try {
-        const headers = await getAdminAuthHeaders();
-        const resp = await fetch(selectedPayment.proofFilePath, { headers });
-        if (!resp.ok) throw new Error('Bukti transfer tidak tersedia di server.');
-        const blob = await resp.blob();
-        createdUrl = URL.createObjectURL(blob);
+        createdUrl = await fetchAdminProofObjectUrl(selectedPayment.proofFilePath);
         if (active) setProofBlobUrl(createdUrl);
       } catch (err) {
         console.error('Proof load error:', err);

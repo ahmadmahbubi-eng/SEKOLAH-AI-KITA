@@ -33,11 +33,156 @@ import type {
   WebsiteSettings,
 } from '../types';
 
-function makeClientId(prefix: string): string {
-  const bytes = new Uint8Array(10);
+import { normalizeWhatsappID } from './format';
+
+function randomHex(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${prefix}_${hex}`;
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function makeClientId(prefix: string): string {
+  return `${prefix}_${randomHex(10)}`;
+}
+
+export function isJsonResponse(resp: Response): boolean {
+  const ct = (resp.headers.get('content-type') || '').toLowerCase();
+  return ct.includes('application/json');
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Gagal membaca file bukti transfer.'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Gagal membaca file bukti transfer.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressImageDataUrl(
+  rawDataUrl: string,
+  maxDimension: number,
+  quality: number,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDimension || height > maxDimension) {
+        if (width >= height) {
+          height = Math.max(1, Math.round((height * maxDimension) / width));
+          width = maxDimension;
+        } else {
+          width = Math.max(1, Math.round((width * maxDimension) / height));
+          height = maxDimension;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Browser tidak mendukung pemrosesan gambar.'));
+        return;
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('File gambar bukti transfer tidak dapat diproses.'));
+    img.src = rawDataUrl;
+  });
+}
+
+async function storeProofInFirestore(
+  file: File,
+  accessToken: string,
+  registrationNumber: string,
+  onProgress: (percent: number) => void,
+): Promise<{
+  proofFileId: string;
+  proofFilePath: string;
+  proofFileName: string;
+  proofMimeType: 'image/jpeg' | 'image/png' | 'application/pdf';
+}> {
+  const lowerType = (file.type || '').toLowerCase();
+  const isPdf = lowerType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const isPng = lowerType === 'image/png' || file.name.toLowerCase().endsWith('.png');
+  const isJpg =
+    lowerType === 'image/jpeg' ||
+    lowerType === 'image/jpg' ||
+    file.name.toLowerCase().endsWith('.jpg') ||
+    file.name.toLowerCase().endsWith('.jpeg');
+
+  if (!isPdf && !isPng && !isJpg) {
+    throw new Error('Format file harus berupa JPG, PNG, atau PDF.');
+  }
+
+  onProgress(20);
+  let dataUrl = await readFileAsDataUrl(file);
+  let finalMime: 'image/jpeg' | 'image/png' | 'application/pdf' = isPdf
+    ? 'application/pdf'
+    : isPng
+      ? 'image/png'
+      : 'image/jpeg';
+
+  if (isPdf) {
+    if (dataUrl.length > 880_000) {
+      throw new Error(
+        'Ukuran file PDF terlalu besar (maksimal ~600KB). Silakan unggah screenshot bukti transfer dalam format JPG atau PNG.',
+      );
+    }
+  } else {
+    onProgress(45);
+    const attempts: Array<{ maxDim: number; quality: number }> = [
+      { maxDim: 1280, quality: 0.78 },
+      { maxDim: 1024, quality: 0.68 },
+      { maxDim: 820, quality: 0.56 },
+    ];
+    for (const step of attempts) {
+      if (dataUrl.length <= 850_000 && finalMime === 'image/jpeg') break;
+      dataUrl = await compressImageDataUrl(dataUrl, step.maxDim, step.quality);
+      finalMime = 'image/jpeg';
+      if (dataUrl.length <= 850_000) break;
+    }
+    if (dataUrl.length > 880_000) {
+      throw new Error(
+        'Ukuran gambar bukti transfer masih terlalu besar setelah kompresi. Mohon gunakan foto yang lebih kecil.',
+      );
+    }
+  }
+
+  onProgress(75);
+  const proofFileId = makeClientId('prf');
+  const cleanName = (file.name || 'bukti-transfer').trim().slice(0, 200) || 'bukti-transfer';
+  try {
+    await setDoc(doc(db, 'payment_proofs', proofFileId), {
+      id: proofFileId,
+      accessToken,
+      registrationNumber,
+      fileName: cleanName,
+      mimeType: finalMime,
+      dataUrl,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `payment_proofs/${proofFileId}`);
+  }
+
+  onProgress(100);
+  return {
+    proofFileId,
+    proofFilePath: `firestore:${proofFileId}`,
+    proofFileName: cleanName,
+    proofMimeType: finalMime,
+  };
 }
 
 export async function getAdminAuthHeaders(): Promise<Record<string, string>> {
@@ -47,6 +192,39 @@ export async function getAdminAuthHeaders(): Promise<Record<string, string>> {
   return {
     Authorization: `Bearer ${token}`,
   };
+}
+
+export async function fetchAdminProofObjectUrl(proofFilePath: string): Promise<string> {
+  if (proofFilePath.startsWith('firestore:')) {
+    const proofId = proofFilePath.slice('firestore:'.length);
+    const snap = await getDoc(doc(db, 'payment_proofs', proofId));
+    if (!snap.exists()) {
+      throw new Error('Bukti transfer tidak ditemukan di database.');
+    }
+    const payload = snap.data() as { dataUrl?: string; mimeType?: string };
+    if (!payload.dataUrl || !payload.dataUrl.includes(',')) {
+      throw new Error('Data lampiran bukti transfer kosong.');
+    }
+    const [header, base64] = payload.dataUrl.split(',');
+    const mimeMatch = header.match(/data:([^;]+);base64/i);
+    const mimeType = mimeMatch?.[1] || payload.mimeType || 'image/jpeg';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: mimeType });
+    return URL.createObjectURL(blob);
+  }
+
+  const headers = await getAdminAuthHeaders();
+  const resp = await fetch(proofFilePath, { headers });
+  const ct = (resp.headers.get('content-type') || '').toLowerCase();
+  if (!resp.ok || ct.includes('text/html')) {
+    throw new Error('Bukti transfer tidak tersedia di server.');
+  }
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
 }
 
 // =========================================================================
@@ -138,29 +316,62 @@ export interface CreateRegistrationInput {
 export async function createRegistrationTransaction(
   input: CreateRegistrationInput,
 ): Promise<{ registration: Registration; ticket: RegistrationTicket; isWaitlist: boolean }> {
-  // 1. Server-side validation, rate limiting, and cryptographic token generation
-  const initResp = await fetch('/api/registration/init', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fullName: input.fullName.trim(),
-      whatsapp: input.whatsapp.trim(),
-      email: input.email.trim(),
-    }),
-  });
-  const initData = (await initResp.json()) as {
-    registrationId?: string;
-    accessToken?: string;
-    normalizedWhatsapp?: string;
-    error?: string;
-  };
-  if (!initResp.ok || !initData.registrationId || !initData.accessToken || !initData.normalizedWhatsapp) {
-    throw new Error(initData.error || 'Gagal menginisialisasi pendaftaran di server.');
+  // 1. Validate locally first so static hosting & Express server enforce identical rules
+  const trimmedName = input.fullName.trim();
+  const trimmedEmail = input.email.trim().toLowerCase();
+  const localNormalizedWa = normalizeWhatsappID(input.whatsapp.trim());
+  if (trimmedName.length < 2) {
+    throw new Error('Nama lengkap wajib diisi minimal 2 karakter.');
+  }
+  if (!/^62[0-9]{8,15}$/.test(localNormalizedWa)) {
+    throw new Error('Format nomor WhatsApp tidak valid. Contoh: 081234567890.');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    throw new Error('Format alamat email tidak valid.');
   }
 
-  const registrationId = initData.registrationId;
-  const accessToken = initData.accessToken;
-  const normalizedWhatsapp = initData.normalizedWhatsapp;
+  // Try Express backend initializer first; seamlessly fall back to Web Crypto when served statically
+  let registrationId = `reg_${randomHex(12)}`;
+  let accessToken = randomHex(24);
+  let normalizedWhatsapp = localNormalizedWa;
+
+  try {
+    const initResp = await fetch('/api/registration/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: trimmedName,
+        whatsapp: input.whatsapp.trim(),
+        email: trimmedEmail,
+      }),
+    });
+    if (isJsonResponse(initResp)) {
+      const initData = (await initResp.json()) as {
+        registrationId?: string;
+        accessToken?: string;
+        normalizedWhatsapp?: string;
+        error?: string;
+      };
+      if (!initResp.ok) {
+        throw new Error(initData.error || 'Gagal menginisialisasi pendaftaran di server.');
+      }
+      if (initData.registrationId && initData.accessToken && initData.normalizedWhatsapp) {
+        registrationId = initData.registrationId;
+        accessToken = initData.accessToken;
+        normalizedWhatsapp = initData.normalizedWhatsapp;
+      }
+    }
+  } catch (err) {
+    // Re-throw genuine backend validation/rate-limit errors; ignore missing /api route on static hosts
+    if (
+      err instanceof Error &&
+      !(err instanceof TypeError) &&
+      !(err instanceof SyntaxError) &&
+      !err.message.toLowerCase().includes('fetch')
+    ) {
+      throw err;
+    }
+  }
 
   // 2. Atomic Firestore transaction for unique sequential registrationNumber & waitlist counter
   const programRef = doc(db, 'programs', input.programId);
@@ -265,6 +476,12 @@ export function uploadProofFileWithProgress(
   proofMimeType: 'image/jpeg' | 'image/png' | 'application/pdf';
 }> {
   return new Promise((resolve, reject) => {
+    const fallbackToFirestore = () => {
+      storeProofInFirestore(file, accessToken, registrationNumber, onProgress)
+        .then(resolve)
+        .catch(reject);
+    };
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('accessToken', accessToken);
@@ -275,11 +492,17 @@ export function uploadProofFileWithProgress(
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
+        onProgress(Math.min(90, Math.round((event.loaded / event.total) * 90)));
       }
     };
 
     xhr.onload = () => {
+      const contentType = (xhr.getResponseHeader('content-type') || '').toLowerCase();
+      if (!contentType.includes('application/json')) {
+        // Static hosting (e.g., custom domain without Express) returned HTML/404 -> store securely in Firestore
+        fallbackToFirestore();
+        return;
+      }
       try {
         const parsed = JSON.parse(xhr.responseText) as {
           proofFileId?: string;
@@ -288,7 +511,14 @@ export function uploadProofFileWithProgress(
           proofMimeType?: 'image/jpeg' | 'image/png' | 'application/pdf';
           error?: string;
         };
-        if (xhr.status >= 200 && xhr.status < 300 && parsed.proofFilePath && parsed.proofMimeType && parsed.proofFileId && parsed.proofFileName) {
+        if (
+          xhr.status >= 200 &&
+          xhr.status < 300 &&
+          parsed.proofFilePath &&
+          parsed.proofMimeType &&
+          parsed.proofFileId &&
+          parsed.proofFileName
+        ) {
           onProgress(100);
           resolve({
             proofFileId: parsed.proofFileId,
@@ -296,15 +526,17 @@ export function uploadProofFileWithProgress(
             proofFileName: parsed.proofFileName,
             proofMimeType: parsed.proofMimeType,
           });
+        } else if (xhr.status === 404 || xhr.status === 405) {
+          fallbackToFirestore();
         } else {
           reject(new Error(parsed.error || 'Gagal mengunggah file bukti transfer.'));
         }
       } catch {
-        reject(new Error('Respon server tidak valid saat mengunggah file.'));
+        fallbackToFirestore();
       }
     };
 
-    xhr.onerror = () => reject(new Error('Koneksi terputus saat mengunggah bukti transfer.'));
+    xhr.onerror = () => fallbackToFirestore();
     xhr.send(formData);
   });
 }
@@ -436,7 +668,7 @@ export async function submitPaymentProofTransaction(input: SubmitPaymentProofInp
         amount: input.transferAmount,
       }),
     });
-    if (resp.ok) {
+    if (resp.ok && isJsonResponse(resp)) {
       const data = (await resp.json()) as {
         results?: Array<{
           channel: NotificationLog['channel'];
@@ -482,21 +714,48 @@ export async function fetchUnlockedCommunityLink(accessToken: string): Promise<{
   description?: string;
   whatsappInviteUrl?: string;
 }> {
-  const resp = await fetch('/api/community/access', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accessToken }),
-  });
-  if (!resp.ok) {
+  try {
+    const resp = await fetch('/api/community/access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken }),
+    });
+    if (resp.ok && isJsonResponse(resp)) {
+      return (await resp.json()) as {
+        unlocked: boolean;
+        configured: boolean;
+        communityName?: string;
+        description?: string;
+        whatsappInviteUrl?: string;
+      };
+    }
+  } catch {
+    // Fallback to Firestore token verification below when deployed statically
+  }
+
+  try {
+    const ticket = await fetchRegistrationTicket(accessToken);
+    if (!ticket) {
+      return { unlocked: false, configured: false };
+    }
+    const eligible =
+      ticket.paymentStatus === 'menunggu_verifikasi' || ticket.paymentStatus === 'lunas';
+    if (!eligible) {
+      return { unlocked: false, configured: false };
+    }
+    const configured = Boolean(
+      DEFAULT_COMMUNITY_SETTINGS.isActive && DEFAULT_COMMUNITY_SETTINGS.whatsappInviteUrl.trim(),
+    );
+    return {
+      unlocked: true,
+      configured,
+      communityName: DEFAULT_COMMUNITY_SETTINGS.communityName,
+      description: DEFAULT_COMMUNITY_SETTINGS.description,
+      whatsappInviteUrl: configured ? DEFAULT_COMMUNITY_SETTINGS.whatsappInviteUrl : '',
+    };
+  } catch {
     return { unlocked: false, configured: false };
   }
-  return (await resp.json()) as {
-    unlocked: boolean;
-    configured: boolean;
-    communityName?: string;
-    description?: string;
-    whatsappInviteUrl?: string;
-  };
 }
 
 // =========================================================================
@@ -762,7 +1021,7 @@ export async function verifyPaymentAction(params: {
           location: program.location,
         }),
       });
-      if (resp.ok) {
+      if (resp.ok && isJsonResponse(resp)) {
         const data = (await resp.json()) as {
           result?: {
             channel: NotificationLog['channel'];
@@ -1027,22 +1286,26 @@ export async function saveCommunitySettings(settings: CommunitySettings): Promis
       ...settings,
       updatedAt: serverTimestamp(),
     });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+
+  // Best-effort sync to Express runtime if available
+  try {
     const headers = await getAdminAuthHeaders();
     const resp = await fetch('/api/admin/sync-runtime', {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ community: settings }),
     });
-    if (!resp.ok) {
+    if (!resp.ok && isJsonResponse(resp)) {
       const errData = (await resp.json()) as { error?: string };
-      throw new Error(errData.error || 'Gagal menyinkronkan pengaturan komunitas ke server.');
+      console.warn('Community runtime sync warning:', errData.error);
     }
-  } catch (error) {
-    if (error instanceof Error && !error.message.toLowerCase().includes('permission')) {
-      throw error;
-    }
-    handleFirestoreError(error, OperationType.WRITE, path);
+  } catch (err) {
+    console.warn('Community runtime sync skipped on static host:', err);
   }
+
   await logAdminAudit(
     'UPDATE_COMMUNITY_SETTINGS',
     'settings',
@@ -1058,15 +1321,22 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
       ...settings,
       updatedAt: serverTimestamp(),
     });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+
+  // Best-effort sync to Express runtime if available
+  try {
     const headers = await getAdminAuthHeaders();
     await fetch('/api/admin/sync-runtime', {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ notifications: settings }),
     });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+  } catch (err) {
+    console.warn('Notification runtime sync skipped on static host:', err);
   }
+
   await logAdminAudit(
     'UPDATE_NOTIFICATION_SETTINGS',
     'settings',
@@ -1084,6 +1354,11 @@ export async function uploadAdminAsset(file: File): Promise<string> {
     headers,
     body: formData,
   });
+  if (!isJsonResponse(resp)) {
+    throw new Error(
+      'Unggah file langsung tidak tersedia pada hosting statis. Silakan tempel URL gambar langsung pada kolom URL.',
+    );
+  }
   const data = (await resp.json()) as { url?: string; error?: string };
   if (!resp.ok || !data.url) {
     throw new Error(data.error || 'Gagal mengunggah gambar.');

@@ -217,6 +217,21 @@
         "updatedAt"
       ]
     },
+    "PaymentProof": {
+      "title": "PaymentProof",
+      "description": "Lampiran file bukti transfer terkompresi dalam format Data URL (khusus dibaca admin).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "accessToken": { "type": "string", "minLength": 32, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationNumber": { "type": "string", "minLength": 8, "maxLength": 40, "pattern": "^SAKITA-[0-9]{4}-[0-9]{4,6}$" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "application/pdf"] },
+        "dataUrl": { "type": "string", "minLength": 20, "maxLength": 900000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "accessToken", "registrationNumber", "fileName", "mimeType", "dataUrl", "createdAt"]
+    },
     "WebsiteSettings": {
       "title": "WebsiteSettings",
       "description": "Konten CMS landing page SAKITA yang dikelola admin.",
@@ -390,6 +405,10 @@
     "/payments/{paymentId}": {
       "schema": { "$ref": "#/entities/Payment" },
       "description": "Data pembayaran dan path bukti transfer peserta."
+    },
+    "/payment_proofs/{proofId}": {
+      "schema": { "$ref": "#/entities/PaymentProof" },
+      "description": "Lampiran bukti transfer terkompresi (privat, hanya dapat dibaca dan dihapus admin)."
     },
     "/website_settings/{settingId}": {
       "schema": { "$ref": "#/entities/WebsiteSettings" },

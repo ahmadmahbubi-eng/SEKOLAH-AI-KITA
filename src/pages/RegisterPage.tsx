@@ -269,7 +269,11 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
 
   const handleFileChange = (file: File | null) => {
     if (!file) return;
-    if (!ALLOWED_MIME.includes(file.type)) {
+    const lowerName = file.name.toLowerCase();
+    const lowerType = (file.type || '').toLowerCase();
+    const isAllowedExt = /\.(jpe?g|png|pdf)$/.test(lowerName);
+    const isAllowedMime = ALLOWED_MIME.includes(lowerType) || lowerType === 'image/jpg';
+    if (!isAllowedMime && !isAllowedExt) {
       toast('error', 'Format file tidak didukung', 'Gunakan file berformat JPG, JPEG, PNG, atau PDF.');
       return;
     }
@@ -279,7 +283,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     }
     if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
     setSelectedFile(file);
-    if (file.type.startsWith('image/')) {
+    if (lowerType.startsWith('image/') || /\.(jpe?g|png)$/.test(lowerName)) {
       setFilePreviewUrl(URL.createObjectURL(file));
     } else {
       setFilePreviewUrl(null);

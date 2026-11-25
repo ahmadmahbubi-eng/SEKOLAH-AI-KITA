@@ -221,6 +221,22 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidPaymentProof(data) {
+      return data.keys().hasAll([
+          'id', 'accessToken', 'registrationNumber', 'fileName', 'mimeType', 'dataUrl', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'accessToken', 'registrationNumber', 'fileName', 'mimeType', 'dataUrl', 'createdAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 16
+        && isValidToken(data.accessToken)
+        && isValidString(data.registrationNumber, 8, 40) && data.registrationNumber.matches('^SAKITA-[0-9]{4}-[0-9]{4,6}$')
+        && isValidString(data.fileName, 1, 200)
+        && data.mimeType in ['image/jpeg', 'image/png', 'application/pdf']
+        && isValidString(data.dataUrl, 20, 900000)
+        && data.createdAt is timestamp;
+    }
+
     function isValidWebsiteSettings(data) {
       return data.keys().hasAll([
           'brandName', 'brandSubtitle', 'tagline', 'logoUrl',
@@ -501,6 +517,19 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly(['verificationStatus', 'verifiedBy', 'verifiedAt', 'rejectionReason', 'updatedAt']);
       allow delete: if isValidId(paymentId) && isAdmin();
+    }
+
+    // 5b. Payment Proofs (Compressed transfer proof blobs - strictly private read/delete for Admin)
+    match /payment_proofs/{proofId} {
+      allow get: if isValidId(proofId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(proofId)
+        && isValidPaymentProof(incoming())
+        && incoming().id == proofId
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/registration_tickets/$(incoming().accessToken));
+      allow update: if false;
+      allow delete: if isValidId(proofId) && isAdmin();
     }
 
     // 6. Website Settings (CMS Content - Public get 'default', Admin write)
