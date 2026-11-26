@@ -68,6 +68,69 @@
         }
       }
     </script>
+    <!-- Meta Pixel Code (SAKITA — ID: 1111405168537688) -->
+    <script>
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = '2.0';
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+      (function () {
+        var PIXEL_ID = '1111405168537688';
+        var consent = 'granted';
+        try {
+          var stored = window.localStorage.getItem('sakita_privacy_consent');
+          if (stored === 'denied') {
+            consent = 'denied';
+          } else if (stored !== 'granted') {
+            var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+            if (dnt === '1' || dnt === 'yes') consent = 'denied';
+          }
+        } catch (e) {}
+
+        var pathname = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+        var isAdmin = pathname === '/admin' || pathname.indexOf('/admin/') === 0;
+        var currentPath = (window.location.pathname || '/') + (window.location.search || '');
+
+        window.__SAKITA_META_PIXEL__ = window.__SAKITA_META_PIXEL__ || {
+          pixelId: PIXEL_ID,
+          initialized: false,
+          lastPageViewPath: '',
+          trackedLeads: {},
+        };
+
+        if (consent === 'denied') {
+          window.fbq('consent', 'revoke');
+          window.fbq('init', PIXEL_ID);
+          window.__SAKITA_META_PIXEL__.initialized = true;
+        } else {
+          window.fbq('consent', 'grant');
+          window.fbq('init', PIXEL_ID);
+          window.__SAKITA_META_PIXEL__.initialized = true;
+          if (!isAdmin) {
+            window.__SAKITA_META_PIXEL__.lastPageViewPath = currentPath;
+            window.fbq(
+              'track',
+              'PageView',
+              {},
+              { eventID: 'pv_init_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) },
+            );
+          }
+        }
+      })();
+    </script>
+    <!-- End Meta Pixel Code -->
   </head>
   <body class="bg-[#080F1D] text-[#F8FAFC] antialiased selection:bg-[#22D3EE]/25 selection:text-[#F8FAFC]">
     <div id="root">

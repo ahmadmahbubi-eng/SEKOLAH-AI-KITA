@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
+import { trackMetaPageView } from './lib/metaPixel';
 import { LandingPage } from './pages/LandingPage';
 
 const RegisterPage = lazy(() =>
@@ -40,6 +41,10 @@ function AppRouter() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  useEffect(() => {
+    trackMetaPageView(locationPath);
+  }, [locationPath]);
 
   const navigate = useCallback((to: string) => {
     if (to === window.location.pathname + window.location.search) return;

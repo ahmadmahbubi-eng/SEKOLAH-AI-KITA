@@ -39,6 +39,7 @@ import {
   submitPaymentProofTransaction,
   uploadProofFileWithProgress,
 } from '../lib/sakitaService';
+import { trackMetaLead } from '../lib/metaPixel';
 import type { BankSettings, Program, RegistrationTicket, WebsiteSettings } from '../types';
 
 interface RegisterPageProps {
@@ -229,6 +230,18 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         ...biodata,
         joinWaitlistIfFull: isFull,
       });
+
+      // Fire Meta Pixel Lead strictly AFTER registration data is saved & privacy agreed (deduplicated)
+      trackMetaLead({
+        registrationId: registration.id,
+        registrationNumber: registration.registrationNumber,
+        programId: registration.programId,
+        programName: registration.programName,
+        amount: registration.amount,
+        isWaitlist,
+        privacyAccepted: agreePrivacy,
+      });
+
       setCreatedTicket(ticket);
       setCreatedEmail(registration.email);
       setCreatedPosition(registration.position);
