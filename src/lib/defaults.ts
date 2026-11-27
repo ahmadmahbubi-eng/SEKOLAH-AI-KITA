@@ -142,9 +142,9 @@ export const DEFAULT_PROGRAM: Program = {
   batchLabel: 'INTENSIVE AI BOOTCAMP 2026',
   description:
     'Pelatihan praktik intensif 4 hari untuk membimbing pengelola sekolah dan pesantren membangun 10 proyek aplikasi digital lembaga dengan bantuan AI tanpa harus bisa coding.',
-  dateLabel: '21–24 Desember 2026',
-  startDateIso: '2026-12-21T08:00:00+07:00',
-  endDateIso: '2026-12-24T17:00:00+07:00',
+  dateLabel: '28–31 Desember 2026',
+  startDateIso: '2026-12-28T08:00:00+07:00',
+  endDateIso: '2026-12-31T17:00:00+07:00',
   durationLabel: '4 Hari Pelatihan Intensif',
   location: 'Hotel Grand Makmur, Jambi',
   price: 2700000,

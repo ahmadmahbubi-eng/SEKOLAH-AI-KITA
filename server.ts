@@ -925,7 +925,7 @@ async function startServer() {
       nama: String(fullName),
       registrasi: String(registrationNumber),
       program: String(programName || ''),
-      tanggal: String(dateLabel || '21–24 Desember 2026'),
+      tanggal: String(dateLabel || '28–31 Desember 2026'),
       lokasi: String(location || 'Hotel Grand Makmur, Jambi'),
     };
     const subject = notifRuntimeConfig.verifiedEmailSubject || 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita';

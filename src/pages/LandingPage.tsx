@@ -888,7 +888,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                 </div>
 
                 <div className="mt-6">
-                  <CountdownTimer targetIso={activeProgram.startDateIso || '2026-12-21T08:00:00+07:00'} />
+                  <CountdownTimer targetIso={activeProgram.startDateIso || '2026-12-28T08:00:00+07:00'} />
                 </div>
               </div>
 

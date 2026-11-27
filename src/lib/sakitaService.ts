@@ -236,12 +236,54 @@ export async function fetchAdminProofObjectUrl(proofFilePath: string): Promise<s
 // =========================================================================
 // PUBLIC READS (Landing Page, Registration Form, Token-Gated Status Page)
 // =========================================================================
+const LEGACY_PROGRAM_DATE_LABELS = new Set([
+  '21–24 desember 2026',
+  '21-24 desember 2026',
+  '21 - 24 desember 2026',
+  '21 – 24 desember 2026',
+]);
+const LEGACY_PROGRAM_START_ISO = '2026-12-21T08:00:00+07:00';
+const LEGACY_PROGRAM_END_ISO = '2026-12-24T17:00:00+07:00';
+
+function isLegacyProgramDateLabel(val?: string): boolean {
+  if (!val) return false;
+  return LEGACY_PROGRAM_DATE_LABELS.has(val.trim().toLowerCase());
+}
+
+function normalizeLegacyProgramDates(prog: Program): Program {
+  if (prog.id !== DEFAULT_PROGRAM.id) return prog;
+  const nextDateLabel = isLegacyProgramDateLabel(prog.dateLabel)
+    ? DEFAULT_PROGRAM.dateLabel
+    : prog.dateLabel;
+  const nextStartIso =
+    prog.startDateIso === LEGACY_PROGRAM_START_ISO
+      ? DEFAULT_PROGRAM.startDateIso
+      : prog.startDateIso;
+  const nextEndIso =
+    prog.endDateIso === LEGACY_PROGRAM_END_ISO
+      ? DEFAULT_PROGRAM.endDateIso
+      : prog.endDateIso;
+  if (
+    nextDateLabel === prog.dateLabel &&
+    nextStartIso === prog.startDateIso &&
+    nextEndIso === prog.endDateIso
+  ) {
+    return prog;
+  }
+  return {
+    ...prog,
+    dateLabel: nextDateLabel,
+    startDateIso: nextStartIso,
+    endDateIso: nextEndIso,
+  };
+}
+
 export async function fetchPublicPrograms(): Promise<Program[]> {
   const path = 'programs';
   try {
     const q = query(collection(db, path), where('status', 'in', ['open', 'closed', 'archived']));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ ...(d.data() as Program), id: d.id }));
+    return snap.docs.map((d) => normalizeLegacyProgramDates({ ...(d.data() as Program), id: d.id }));
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
   }
@@ -295,7 +337,11 @@ export async function fetchRegistrationTicket(accessToken: string): Promise<Regi
   try {
     const snap = await getDoc(doc(db, 'registration_tickets', accessToken));
     if (!snap.exists()) return null;
-    return snap.data() as RegistrationTicket;
+    const ticket = snap.data() as RegistrationTicket;
+    if (ticket.programId === DEFAULT_PROGRAM.id && isLegacyProgramDateLabel(ticket.programDates)) {
+      return { ...ticket, programDates: DEFAULT_PROGRAM.dateLabel };
+    }
+    return ticket;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
   }
@@ -390,7 +436,7 @@ export async function createRegistrationTransaction(
       if (!progSnap.exists()) {
         throw new Error('Program pelatihan tidak ditemukan di database.');
       }
-      const prog = progSnap.data() as Program;
+      const prog = normalizeLegacyProgramDates({ ...(progSnap.data() as Program), id: progSnap.id });
       if (prog.status !== 'open') {
         throw new Error('Pendaftaran untuk program ini saat ini ditutup.');
       }
@@ -819,7 +865,7 @@ export async function bootstrapAdminEnvironment(): Promise<void> {
     handleFirestoreError(error, OperationType.WRITE, `admins/${user.uid}`);
   }
 
-  // Ensure default program exists
+  // Ensure default program exists and sync legacy schedule date if still untouched
   const progRef = doc(db, 'programs', DEFAULT_PROGRAM.id);
   try {
     const progSnap = await getDoc(progRef);
@@ -829,6 +875,24 @@ export async function bootstrapAdminEnvironment(): Promise<void> {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+    } else {
+      const existingProg = progSnap.data() as Partial<Program>;
+      const progPatch: Record<string, unknown> = {};
+      if (isLegacyProgramDateLabel(existingProg.dateLabel)) {
+        progPatch.dateLabel = DEFAULT_PROGRAM.dateLabel;
+      }
+      if (existingProg.startDateIso === LEGACY_PROGRAM_START_ISO) {
+        progPatch.startDateIso = DEFAULT_PROGRAM.startDateIso;
+      }
+      if (existingProg.endDateIso === LEGACY_PROGRAM_END_ISO) {
+        progPatch.endDateIso = DEFAULT_PROGRAM.endDateIso;
+      }
+      if (Object.keys(progPatch).length > 0) {
+        await updateDoc(progRef, {
+          ...progPatch,
+          updatedAt: serverTimestamp(),
+        });
+      }
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `programs/${DEFAULT_PROGRAM.id}`);
