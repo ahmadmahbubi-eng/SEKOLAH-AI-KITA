@@ -23,6 +23,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ResolvedAssetImage } from '../ResolvedAssetImage';
+import { getToolBrandVisual, ToolBrandLogo } from './ToolBrandLogo';
 import { DEFAULT_TRAINER_SECTION_ORDER, DEFAULT_TRAINER_SECTION_VISIBILITY } from '../../lib/defaults';
 import { isSafeHttpUrl } from '../../lib/sakitaService';
 import type { Program, TrainerProfile, TrainerSectionKey } from '../../types';
@@ -59,57 +60,6 @@ function getInitials(name: string): string {
   if (clean.length === 0) return 'AM';
   if (clean.length === 1) return clean[0].slice(0, 2).toUpperCase();
   return `${clean[0][0]}${clean[1][0]}`.toUpperCase();
-}
-
-function ToolMonogram({ name }: { name: string }) {
-  const lower = name.toLowerCase();
-  if (lower.includes('chatgpt') || lower.includes('openai')) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 text-[#D4AF37]" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="M12 3.5v17M4.6 7.8l14.8 8.4M19.4 7.8L4.6 16.2" strokeOpacity="0.65" />
-      </svg>
-    );
-  }
-  if (lower.includes('gemini')) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 text-[#60A5FA]" fill="currentColor" aria-hidden="true">
-        <path d="M12 2.5c.8 4.9 4.6 8.7 9.5 9.5-4.9.8-8.7 4.6-9.5 9.5-.8-4.9-4.6-8.7-9.5-9.5 4.9-.8 8.7-4.6 9.5-9.5Z" />
-      </svg>
-    );
-  }
-  if (lower.includes('ai studio')) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 text-[#22D3EE]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-        <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
-        <path d="M8.5 9.5L11 12l-2.5 2.5M13 14.5h3" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  if (lower.includes('lovable')) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 text-[#D4AF37]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-        <path d="M12 20s-7-4.4-7-10.2A4.3 4.3 0 0 1 12 6.8a4.3 4.3 0 0 1 7 3c0 5.8-7 10.2-7 10.2Z" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  if (lower.includes('flow')) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 text-[#60A5FA]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-        <path d="M4 8c3 0 3 8 6 8s3-8 6-8 3 8 4 8" strokeLinecap="round" />
-        <circle cx="4" cy="8" r="1.5" fill="currentColor" />
-        <circle cx="20" cy="16" r="1.5" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (lower.includes('vercel')) {
-    return (
-      <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-white" fill="currentColor" aria-hidden="true">
-        <path d="M12 4.5 20.5 19H3.5L12 4.5Z" />
-      </svg>
-    );
-  }
-  return <Cpu className="h-5 w-5 text-[#60A5FA]" aria-hidden="true" />;
 }
 
 export function TrainerProfileSection({
@@ -272,19 +222,29 @@ export function TrainerProfileSection({
             </div>
 
             <div className="mt-8 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
-              {trainer.tools.map((tool, idx) => (
-                <div
-                  key={`${tool}-${idx}`}
-                  className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-white/10 bg-[#0B1C3A]/65 px-4 py-5 text-center backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:border-[#2563EB]/55 hover:bg-[#102750]/75"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#07152D]/80">
-                    <ToolMonogram name={tool} />
-                  </span>
-                  <span className="text-sm font-semibold tracking-tight text-white">
-                    {tool}
-                  </span>
-                </div>
-              ))}
+              {trainer.tools.map((tool, idx) => {
+                const visual = getToolBrandVisual(tool);
+                return (
+                  <div
+                    key={`${tool}-${idx}`}
+                    className={`group flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-[#0B1C3A]/70 px-4 py-5 text-center backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:bg-[#102750]/85 ${visual.hoverBorderClass}`}
+                  >
+                    <span
+                      className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-transform duration-200 group-hover:scale-105 ${visual.badgeClass}`}
+                    >
+                      <ToolBrandLogo name={tool} />
+                    </span>
+                    <div>
+                      <span className="block text-sm font-semibold tracking-tight text-white">
+                        {tool}
+                      </span>
+                      <span className="mt-0.5 block font-mono text-[10px] tracking-wider text-slate-400">
+                        {visual.subtitle}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {trainer.toolsDisclaimer && (

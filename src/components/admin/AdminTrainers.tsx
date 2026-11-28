@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { ResolvedAssetImage } from '../ResolvedAssetImage';
+import { getToolBrandVisual, ToolBrandLogo } from '../landing/ToolBrandLogo';
 import { TrainerProfileSection } from '../landing/TrainerProfileSection';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -1097,34 +1098,43 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
                   />
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                    {draft.tools.map((tool, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={tool}
-                          onChange={(e) =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              tools: prev.tools.map((t, i) => (i === idx ? e.target.value : t)),
-                            }))
-                          }
-                          placeholder="Nama platform"
-                          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              tools: prev.tools.filter((_, i) => i !== idx),
-                            }))
-                          }
-                          className="rounded-md border border-rose-200 p-2 text-rose-600 hover:bg-rose-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                    {draft.tools.map((tool, idx) => {
+                      const visual = getToolBrandVisual(tool);
+                      return (
+                        <div key={idx} className="flex items-center gap-1.5">
+                          <span
+                            title={`Logo otomatis: ${tool || 'AI Tool'}`}
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-[#07152D] ${visual.badgeClass}`}
+                          >
+                            <ToolBrandLogo name={tool} />
+                          </span>
+                          <input
+                            type="text"
+                            value={tool}
+                            onChange={(e) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                tools: prev.tools.map((t, i) => (i === idx ? e.target.value : t)),
+                              }))
+                            }
+                            placeholder="Nama platform (mis. ChatGPT, Gemini, AI Studio)"
+                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                tools: prev.tools.filter((_, i) => i !== idx),
+                              }))
+                            }
+                            className="rounded-md border border-rose-200 p-2 text-rose-600 hover:bg-rose-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600">
