@@ -431,6 +431,35 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
+    function isValidDemoApp(data) {
+      return data.keys().hasAll([
+          'id', 'orderNumber', 'name', 'subtitle', 'category', 'description',
+          'features', 'icon', 'status', 'demoUrl', 'screenshotUrl', 'isVisible',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'orderNumber', 'name', 'subtitle', 'category', 'description',
+          'features', 'icon', 'status', 'demoUrl', 'screenshotUrl', 'isVisible',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 2 && data.id.size() <= 100
+        && data.orderNumber is number && data.orderNumber >= 1 && data.orderNumber <= 1000
+        && isValidString(data.name, 2, 140)
+        && isValidString(data.subtitle, 0, 180)
+        && isValidString(data.category, 2, 120)
+        && isValidString(data.description, 0, 1200)
+        && data.features is list && data.features.size() <= 15
+        && (data.features.size() == 0 || data.features[0] is string)
+        && isValidString(data.icon, 0, 40)
+        && data.status in ['demo_tersedia', 'dalam_pengembangan', 'segera_hadir']
+        && isValidString(data.demoUrl, 0, 500)
+        && (data.demoUrl == '' || data.demoUrl.matches('^https?://.+'))
+        && isValidString(data.screenshotUrl, 0, 500)
+        && data.isVisible is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // =========================================================================
     // COLLECTION RULES
     // =========================================================================
@@ -724,6 +753,25 @@ service cloud.firestore {
         && incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isValidId(assetId) && isAdmin();
+    }
+
+    // 14. Demo Apps Gallery (Public read for visible items, strict Admin RBAC CRUD)
+    match /demo_apps/{appId} {
+      allow get: if isValidId(appId) && (isAdmin() || (resource != null && resource.data.isVisible == true));
+      allow list: if isAdmin() || resource.data.isVisible == true;
+      allow create: if isValidId(appId)
+        && isAdmin()
+        && isValidDemoApp(incoming())
+        && incoming().id == appId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(appId)
+        && isAdmin()
+        && isValidDemoApp(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(appId) && isAdmin();
     }
   }
 }

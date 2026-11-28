@@ -9,6 +9,7 @@ import {
   FileBarChart2,
   Globe,
   LayoutDashboard,
+  LayoutGrid,
   Loader2,
   LogOut,
   Menu,
@@ -19,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { BrandMark } from '../components/BrandMark';
+import { AdminDemoApps } from '../components/admin/AdminDemoApps';
 import { AdminFinanceReports } from '../components/admin/AdminFinanceReports';
 import { AdminOverview } from '../components/admin/AdminOverview';
 import { AdminParticipants } from '../components/admin/AdminParticipants';
@@ -36,11 +38,12 @@ import {
   DEFAULT_WEBSITE_SETTINGS,
 } from '../lib/defaults';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { normalizeTrainerProfile } from '../lib/sakitaService';
+import { normalizeDemoApp, normalizeTrainerProfile } from '../lib/sakitaService';
 import type {
   AuditLog,
   BankSettings,
   CommunitySettings,
+  DemoAppItem,
   NotificationLog,
   NotificationSettings,
   Payment,
@@ -61,6 +64,7 @@ type AdminSection =
   | 'keuangan'
   | 'komunitas'
   | 'program'
+  | 'galeri_aplikasi'
   | 'pemateri'
   | 'website'
   | 'notifikasi'
@@ -78,6 +82,7 @@ const SIDEBAR_ITEMS: Array<{
   { id: 'keuangan', label: 'Keuangan', icon: Wallet },
   { id: 'komunitas', label: 'Komunitas', icon: MessageSquareHeart },
   { id: 'program', label: 'Program Pelatihan', icon: BookOpen },
+  { id: 'galeri_aplikasi', label: 'Galeri Aplikasi', icon: LayoutGrid },
   { id: 'pemateri', label: 'Manajemen Pemateri', icon: Award },
   { id: 'website', label: 'Kelola Website', icon: Globe },
   { id: 'notifikasi', label: 'Notifikasi', icon: Bell },
@@ -92,6 +97,7 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
   const [selectedProgramId, setSelectedProgramId] = useState<string>('all');
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [demoApps, setDemoApps] = useState<DemoAppItem[]>([]);
   const [trainers, setTrainers] = useState<TrainerProfile[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -121,6 +127,19 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
           setPrograms(snap.docs.map((d) => ({ ...(d.data() as Program), id: d.id })));
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'programs'),
+      ),
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'demo_apps'),
+        (snap) => {
+          const list = snap.docs
+            .map((d) => normalizeDemoApp(d.data() as Partial<DemoAppItem>, d.id))
+            .sort((a, b) => a.orderNumber - b.orderNumber || a.name.localeCompare(b.name));
+          setDemoApps(list);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'demo_apps'),
       ),
     );
 
@@ -445,6 +464,8 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
                 onPreviewProgram={(slug) => navigate(`/program/${encodeURIComponent(slug)}`)}
               />
             )}
+
+            {section === 'galeri_aplikasi' && <AdminDemoApps demoApps={demoApps} />}
 
             {section === 'pemateri' && (
               <AdminTrainers

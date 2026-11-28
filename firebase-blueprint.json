@@ -438,6 +438,43 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "fileName", "mimeType", "dataUrl", "uploadedByUid", "createdAt"]
+    },
+    "DemoApp": {
+      "title": "DemoApp",
+      "description": "Katalog Galeri Aplikasi SAKITA yang dapat dicoba secara langsung maupun yang segera hadir, dikelola penuh oleh admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderNumber": { "type": "number" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "subtitle": { "type": "string", "maxLength": 180 },
+        "category": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 1200 },
+        "features": { "type": "array" },
+        "icon": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["demo_tersedia", "dalam_pengembangan", "segera_hadir"] },
+        "demoUrl": { "type": "string", "maxLength": 500 },
+        "screenshotUrl": { "type": "string", "maxLength": 500 },
+        "isVisible": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "orderNumber",
+        "name",
+        "subtitle",
+        "category",
+        "description",
+        "features",
+        "icon",
+        "status",
+        "demoUrl",
+        "screenshotUrl",
+        "isVisible",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -496,6 +533,10 @@
     "/public_assets/{assetId}": {
       "schema": { "$ref": "#/entities/PublicAsset" },
       "description": "Aset gambar publik terkompresi yang diunggah oleh admin."
+    },
+    "/demo_apps/{appId}": {
+      "schema": { "$ref": "#/entities/DemoApp" },
+      "description": "Katalog Galeri Aplikasi SAKITA (publik untuk aplikasi yang ditampilkan, CRUD penuh hanya untuk admin)."
     }
   }
 }

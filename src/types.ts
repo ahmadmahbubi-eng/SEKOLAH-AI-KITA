@@ -40,6 +40,25 @@ export interface ProjectItem {
   benefit: string;
 }
 
+export type DemoAppStatus = 'demo_tersedia' | 'dalam_pengembangan' | 'segera_hadir';
+
+export interface DemoAppItem {
+  id: string;
+  orderNumber: number;
+  name: string;
+  subtitle: string;
+  category: string;
+  description: string;
+  features: string[];
+  icon: string;
+  status: DemoAppStatus;
+  demoUrl: string;
+  screenshotUrl: string;
+  isVisible: boolean;
+  createdAt?: Timestamp | unknown;
+  updatedAt?: Timestamp | unknown;
+}
+
 export interface FaqItem {
   question: string;
   answer: string;

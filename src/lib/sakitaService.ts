@@ -17,6 +17,7 @@ import {
   ADDITIONAL_ADMIN_FAQ_QUESTIONS,
   DEFAULT_BANK_SETTINGS,
   DEFAULT_COMMUNITY_SETTINGS,
+  DEFAULT_DEMO_APPS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_PRIMARY_TRAINER,
   DEFAULT_PROGRAM,
@@ -31,6 +32,8 @@ import type {
   AdminUserRecord,
   BankSettings,
   CommunitySettings,
+  DemoAppItem,
+  DemoAppStatus,
   FaqItem,
   NotificationLog,
   NotificationSettings,
@@ -435,6 +438,59 @@ export async function fetchPublicTrainers(): Promise<TrainerProfile[]> {
         if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
         return (a.displayOrder || 0) - (b.displayOrder || 0);
       });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+const VALID_DEMO_APP_STATUSES = new Set<DemoAppStatus>([
+  'demo_tersedia',
+  'dalam_pengembangan',
+  'segera_hadir',
+]);
+
+export function normalizeDemoApp(raw: Partial<DemoAppItem> | undefined, id: string): DemoAppItem {
+  const fallback = DEFAULT_DEMO_APPS.find((item) => item.id === id);
+  const status: DemoAppStatus =
+    raw?.status && VALID_DEMO_APP_STATUSES.has(raw.status)
+      ? raw.status
+      : fallback?.status || 'segera_hadir';
+  const rawDemoUrl = typeof raw?.demoUrl === 'string' ? raw.demoUrl.trim() : '';
+  const safeDemoUrl = rawDemoUrl && isSafeHttpUrl(rawDemoUrl) ? rawDemoUrl : '';
+  const rawShot = typeof raw?.screenshotUrl === 'string' ? raw.screenshotUrl.trim() : '';
+  const safeShot = rawShot && isSafeImageUrl(rawShot) ? rawShot : '';
+
+  return {
+    id,
+    orderNumber:
+      typeof raw?.orderNumber === 'number' && Number.isFinite(raw.orderNumber)
+        ? Math.max(1, Math.min(1000, Math.round(raw.orderNumber)))
+        : fallback?.orderNumber || 99,
+    name: (raw?.name || fallback?.name || 'Aplikasi SAKITA').trim(),
+    subtitle: (raw?.subtitle ?? fallback?.subtitle ?? '').trim(),
+    category: (raw?.category || fallback?.category || 'Aplikasi Pendidikan').trim(),
+    description: (raw?.description ?? fallback?.description ?? '').trim(),
+    features: Array.isArray(raw?.features)
+      ? raw.features.map((f) => String(f).trim()).filter(Boolean).slice(0, 15)
+      : fallback?.features || [],
+    icon: (raw?.icon || fallback?.icon || 'LayoutDashboard').trim(),
+    status,
+    demoUrl: safeDemoUrl,
+    screenshotUrl: safeShot,
+    isVisible: typeof raw?.isVisible === 'boolean' ? raw.isVisible : true,
+    createdAt: raw?.createdAt,
+    updatedAt: raw?.updatedAt,
+  };
+}
+
+export async function fetchPublicDemoApps(): Promise<DemoAppItem[]> {
+  const path = 'demo_apps';
+  try {
+    const q = query(collection(db, path), where('isVisible', '==', true));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => normalizeDemoApp(d.data() as Partial<DemoAppItem>, d.id))
+      .sort((a, b) => a.orderNumber - b.orderNumber || a.name.localeCompare(b.name));
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
   }
@@ -1927,6 +1983,160 @@ export async function deleteTrainerProfile(trainer: TrainerProfile): Promise<voi
   } catch (auditErr) {
     console.warn('Non-fatal audit log error after trainer delete:', auditErr);
   }
+}
+
+function buildDemoAppFirestorePayload(app: DemoAppItem) {
+  const rawSlugSource = (app.id || app.name || '').trim().toLowerCase();
+  const cleanId = rawSlugSource
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100);
+  if (cleanId.length < 2) {
+    throw new Error('ID aplikasi harus terdiri dari minimal 2 karakter alfanumerik.');
+  }
+
+  const name = (app.name || '').trim().slice(0, 140);
+  if (name.length < 2) {
+    throw new Error('Nama aplikasi wajib diisi minimal 2 karakter.');
+  }
+
+  const category = (app.category || '').trim().slice(0, 120);
+  if (category.length < 2) {
+    throw new Error('Kategori aplikasi wajib diisi minimal 2 karakter.');
+  }
+
+  const demoUrl = (app.demoUrl || '').trim().slice(0, 500);
+  if (demoUrl && !isSafeHttpUrl(demoUrl)) {
+    throw new Error('URL demo harus diawali dengan https:// atau http:// yang valid.');
+  }
+
+  const screenshotUrl = (app.screenshotUrl || '').trim().slice(0, 500);
+  if (screenshotUrl && !isSafeImageUrl(screenshotUrl)) {
+    throw new Error('URL screenshot tidak valid. Gunakan unggahan file atau URL https:// yang aman.');
+  }
+
+  const status: DemoAppStatus = VALID_DEMO_APP_STATUSES.has(app.status)
+    ? app.status
+    : 'segera_hadir';
+
+  if (status === 'demo_tersedia' && !demoUrl) {
+    throw new Error(
+      'Aplikasi dengan status "Demo Tersedia" wajib memiliki URL demo yang valid.',
+    );
+  }
+
+  const features = (app.features || [])
+    .map((item) => item.trim().slice(0, 160))
+    .filter(Boolean)
+    .slice(0, 15);
+
+  return {
+    id: cleanId,
+    orderNumber: Math.max(1, Math.min(1000, Math.round(Number(app.orderNumber) || 1))),
+    name,
+    subtitle: (app.subtitle || '').trim().slice(0, 180),
+    category,
+    description: (app.description || '').trim().slice(0, 1200),
+    features,
+    icon: (app.icon || 'LayoutDashboard').trim().slice(0, 40),
+    status,
+    demoUrl,
+    screenshotUrl,
+    isVisible: Boolean(app.isVisible),
+  };
+}
+
+export async function saveDemoApp(app: DemoAppItem, isNew: boolean): Promise<void> {
+  const serialized = buildDemoAppFirestorePayload(app);
+  const ref = doc(db, 'demo_apps', serialized.id);
+  let actualOp: OperationType = isNew ? OperationType.CREATE : OperationType.UPDATE;
+
+  try {
+    const existingSnap = await getDoc(ref);
+    if (!existingSnap.exists()) {
+      actualOp = OperationType.CREATE;
+      await setDoc(ref, {
+        ...serialized,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      actualOp = OperationType.UPDATE;
+      const existingData = existingSnap.data() as Record<string, unknown>;
+      await setDoc(ref, {
+        ...serialized,
+        createdAt: existingData.createdAt ?? serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, actualOp, `demo_apps/${serialized.id}`);
+  }
+
+  try {
+    await logAdminAudit(
+      isNew ? 'TAMBAH_GALERI_APLIKASI' : 'UPDATE_GALERI_APLIKASI',
+      'demo_app',
+      serialized.id,
+      `${isNew ? 'Menambahkan' : 'Memperbarui'} aplikasi "${serialized.name}" (Status: ${serialized.status}, Tampil: ${serialized.isVisible ? 'Ya' : 'Tersembunyi'}).`,
+    );
+  } catch (auditErr) {
+    console.warn('Non-fatal audit log error after demo app save:', auditErr);
+  }
+}
+
+export async function deleteDemoApp(app: DemoAppItem): Promise<void> {
+  const path = `demo_apps/${app.id}`;
+  try {
+    await deleteDoc(doc(db, 'demo_apps', app.id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+  try {
+    await logAdminAudit(
+      'HAPUS_GALERI_APLIKASI',
+      'demo_app',
+      app.id,
+      `Menghapus aplikasi "${app.name}" dari Galeri Aplikasi SAKITA.`,
+    );
+  } catch (auditErr) {
+    console.warn('Non-fatal audit log error after demo app delete:', auditErr);
+  }
+}
+
+export async function seedDefaultDemoApps(): Promise<number> {
+  let createdCount = 0;
+  for (const app of DEFAULT_DEMO_APPS) {
+    const ref = doc(db, 'demo_apps', app.id);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      const serialized = buildDemoAppFirestorePayload(app);
+      try {
+        await setDoc(ref, {
+          ...serialized,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        createdCount += 1;
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, `demo_apps/${serialized.id}`);
+      }
+    }
+  }
+  if (createdCount > 0) {
+    try {
+      await logAdminAudit(
+        'INISIALISASI_GALERI_APLIKASI',
+        'demo_app',
+        'default-catalog',
+        `Menginisialisasi ${createdCount} aplikasi katalog awal Galeri Aplikasi SAKITA ke Firestore.`,
+      );
+    } catch (auditErr) {
+      console.warn('Non-fatal audit log error after seeding demo apps:', auditErr);
+    }
+  }
+  return createdCount;
 }
 
 export async function uploadAdminAsset(file: File): Promise<string> {

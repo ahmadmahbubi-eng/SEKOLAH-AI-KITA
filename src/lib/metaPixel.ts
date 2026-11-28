@@ -11,7 +11,7 @@ type FbqFunction = {
   (command: 'init', pixelId: string): void;
   (command: 'consent', action: 'grant' | 'revoke'): void;
   (
-    command: 'track',
+    command: 'track' | 'trackCustom',
     eventName: string,
     params?: Record<string, unknown>,
     options?: { eventID?: string },
@@ -26,6 +26,7 @@ interface SakitaPixelState {
   trackedSessionEvents?: Record<string, true>;
   trackedPurchases?: Record<string, true>;
   lastContactAt?: Record<string, number>;
+  lastDemoAppAt?: Record<string, number>;
 }
 
 declare global {
@@ -46,6 +47,7 @@ function getPixelState(): SakitaPixelState {
       trackedSessionEvents: {},
       trackedPurchases: {},
       lastContactAt: {},
+      lastDemoAppAt: {},
     };
   }
   if (!window.__SAKITA_META_PIXEL__.trackedSessionEvents) {
@@ -56,6 +58,9 @@ function getPixelState(): SakitaPixelState {
   }
   if (!window.__SAKITA_META_PIXEL__.lastContactAt) {
     window.__SAKITA_META_PIXEL__.lastContactAt = {};
+  }
+  if (!window.__SAKITA_META_PIXEL__.lastDemoAppAt) {
+    window.__SAKITA_META_PIXEL__.lastDemoAppAt = {};
   }
   return window.__SAKITA_META_PIXEL__;
 }
@@ -427,6 +432,45 @@ export function trackMetaPurchase(payload: MetaPurchasePayload): boolean {
         value: Number.isFinite(payload.amount) ? payload.amount : 0,
       },
       { eventID: makeEventId('purchase', payload.registrationNumber) },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface MetaViewDemoAppPayload {
+  appName: string;
+  appCategory: string;
+}
+
+/**
+ * Fires Meta Pixel custom event "ViewDemoApp" ONLY when a visitor explicitly clicks
+ * to open an available demo application and privacy consent allows tracking.
+ * Sends strictly app_name and app_category (zero PII), and never fires Lead.
+ */
+export function trackMetaViewDemoApp(payload: MetaViewDemoAppPayload): boolean {
+  try {
+    const cleanName = (payload.appName || '').trim();
+    const cleanCategory = (payload.appCategory || '').trim();
+    if (!cleanName) return false;
+    if (!ensurePixelReady()) return false;
+
+    const state = getPixelState();
+    const now = Date.now();
+    const throttleKey = `${cleanName}:${cleanCategory}`;
+    const last = state.lastDemoAppAt?.[throttleKey] || 0;
+    if (now - last < 2500) return false;
+    state.lastDemoAppAt![throttleKey] = now;
+
+    window.fbq!(
+      'trackCustom',
+      'ViewDemoApp',
+      {
+        app_name: cleanName,
+        app_category: cleanCategory || 'Aplikasi SAKITA',
+      },
+      { eventID: makeEventId('vda') },
     );
     return true;
   } catch {

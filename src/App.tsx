@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { MotionConfig } from 'motion/react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
 import { trackMetaPageView } from './lib/metaPixel';
@@ -122,9 +123,11 @@ function AppRouter() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AppRouter />
-      </ToastProvider>
+      <MotionConfig reducedMotion="user">
+        <ToastProvider>
+          <AppRouter />
+        </ToastProvider>
+      </MotionConfig>
     </ErrorBoundary>
   );
 }
