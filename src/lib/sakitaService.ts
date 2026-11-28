@@ -1690,8 +1690,11 @@ export async function saveTrainerProfile(
   };
 
   const ref = doc(db, 'trainers', cleanId);
+  let actualOp: OperationType = isNew ? OperationType.CREATE : OperationType.UPDATE;
   try {
-    if (isNew) {
+    const existingSnap = await getDoc(ref);
+    if (!existingSnap.exists()) {
+      actualOp = OperationType.CREATE;
       await setDoc(ref, {
         id: cleanId,
         ...payload,
@@ -1699,20 +1702,11 @@ export async function saveTrainerProfile(
         updatedAt: serverTimestamp(),
       });
     } else {
-      const existingSnap = await getDoc(ref);
-      if (!existingSnap.exists()) {
-        await setDoc(ref, {
-          id: cleanId,
-          ...payload,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        await updateDoc(ref, {
-          ...payload,
-          updatedAt: serverTimestamp(),
-        });
-      }
+      actualOp = OperationType.UPDATE;
+      await updateDoc(ref, {
+        ...payload,
+        updatedAt: serverTimestamp(),
+      });
     }
 
     if (payload.isPrimary && allTrainers && allTrainers.length > 0) {
@@ -1729,7 +1723,7 @@ export async function saveTrainerProfile(
       );
     }
   } catch (error) {
-    handleFirestoreError(error, isNew ? OperationType.CREATE : OperationType.UPDATE, `trainers/${cleanId}`);
+    handleFirestoreError(error, actualOp, `trainers/${cleanId}`);
   }
 
   try {
