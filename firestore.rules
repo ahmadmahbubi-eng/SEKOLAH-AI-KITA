@@ -355,6 +355,99 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
+    function isValidTrainer(data) {
+      return data.keys().hasAll([
+          'id', 'isPrimary', 'isPublished', 'displayOrder',
+          'eyebrow', 'sectionSubtitle', 'roleBadge', 'fullName',
+          'titlePrimary', 'titleSecondary', 'pillarsLabel', 'photoUrl',
+          'headline', 'subheadline', 'bio',
+          'expertiseTitle', 'expertiseSubtitle', 'expertise',
+          'backgroundTitle', 'backgroundSubtitle', 'background',
+          'toolsTitle', 'toolsDisclaimer', 'tools',
+          'portfolioTitle', 'portfolioSubtitle', 'portfolio',
+          'whyLearnTitle', 'whyLearnPoints', 'whyLearnNarrative',
+          'personalStatement', 'personalStatementAuthor',
+          'sloganLines', 'sloganEnglish',
+          'ctaHeadline', 'ctaSubheadline', 'ctaButtonLabel',
+          'sectionVisibility', 'sectionOrder', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'isPrimary', 'isPublished', 'displayOrder',
+          'eyebrow', 'sectionSubtitle', 'roleBadge', 'fullName',
+          'titlePrimary', 'titleSecondary', 'pillarsLabel', 'photoUrl',
+          'headline', 'subheadline', 'bio',
+          'expertiseTitle', 'expertiseSubtitle', 'expertise',
+          'backgroundTitle', 'backgroundSubtitle', 'background',
+          'toolsTitle', 'toolsDisclaimer', 'tools',
+          'portfolioTitle', 'portfolioSubtitle', 'portfolio',
+          'whyLearnTitle', 'whyLearnPoints', 'whyLearnNarrative',
+          'personalStatement', 'personalStatementAuthor',
+          'sloganLines', 'sloganEnglish',
+          'ctaHeadline', 'ctaSubheadline', 'ctaButtonLabel',
+          'sectionVisibility', 'sectionOrder', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 3 && data.id.size() <= 100
+        && data.isPrimary is bool
+        && data.isPublished is bool
+        && data.displayOrder is number && data.displayOrder >= 0 && data.displayOrder <= 1000
+        && isValidString(data.eyebrow, 0, 80)
+        && isValidString(data.sectionSubtitle, 0, 160)
+        && isValidString(data.roleBadge, 0, 60)
+        && isValidString(data.fullName, 2, 160)
+        && isValidString(data.titlePrimary, 0, 180)
+        && isValidString(data.titleSecondary, 0, 180)
+        && isValidString(data.pillarsLabel, 0, 180)
+        && isValidString(data.photoUrl, 0, 500)
+        && isValidString(data.headline, 0, 240)
+        && isValidString(data.subheadline, 0, 500)
+        && isValidString(data.bio, 0, 6000)
+        && isValidString(data.expertiseTitle, 0, 120)
+        && isValidString(data.expertiseSubtitle, 0, 180)
+        && data.expertise is list && data.expertise.size() <= 20
+        && (data.expertise.size() == 0 || data.expertise[0] is map)
+        && isValidString(data.backgroundTitle, 0, 120)
+        && isValidString(data.backgroundSubtitle, 0, 180)
+        && data.background is list && data.background.size() <= 25
+        && (data.background.size() == 0 || data.background[0] is string)
+        && isValidString(data.toolsTitle, 0, 140)
+        && isValidString(data.toolsDisclaimer, 0, 500)
+        && data.tools is list && data.tools.size() <= 20
+        && (data.tools.size() == 0 || data.tools[0] is string)
+        && isValidString(data.portfolioTitle, 0, 140)
+        && isValidString(data.portfolioSubtitle, 0, 200)
+        && data.portfolio is list && data.portfolio.size() <= 20
+        && (data.portfolio.size() == 0 || data.portfolio[0] is map)
+        && isValidString(data.whyLearnTitle, 0, 180)
+        && data.whyLearnPoints is list && data.whyLearnPoints.size() <= 10
+        && (data.whyLearnPoints.size() == 0 || data.whyLearnPoints[0] is string)
+        && isValidString(data.whyLearnNarrative, 0, 1000)
+        && isValidString(data.personalStatement, 0, 1200)
+        && isValidString(data.personalStatementAuthor, 0, 160)
+        && data.sloganLines is list && data.sloganLines.size() <= 6
+        && (data.sloganLines.size() == 0 || data.sloganLines[0] is string)
+        && isValidString(data.sloganEnglish, 0, 180)
+        && isValidString(data.ctaHeadline, 0, 240)
+        && isValidString(data.ctaSubheadline, 0, 400)
+        && isValidString(data.ctaButtonLabel, 0, 100)
+        && data.sectionVisibility is map
+        && data.sectionOrder is list && data.sectionOrder.size() <= 10
+        && (data.sectionOrder.size() == 0 || data.sectionOrder[0] is string)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPublicAsset(data) {
+      return data.keys().hasAll(['id', 'fileName', 'mimeType', 'dataUrl', 'uploadedByUid', 'createdAt'])
+        && data.keys().hasOnly(['id', 'fileName', 'mimeType', 'dataUrl', 'uploadedByUid', 'createdAt'])
+        && isValidId(data.id) && data.id.size() >= 12
+        && isValidString(data.fileName, 1, 200)
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+        && isValidString(data.dataUrl, 20, 900000)
+        && data.dataUrl.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        && isValidId(data.uploadedByUid)
+        && data.createdAt is timestamp;
+    }
+
     // =========================================================================
     // COLLECTION RULES
     // =========================================================================
@@ -611,6 +704,39 @@ service cloud.firestore {
         && incoming().adminUid == request.auth.uid
         && incoming().createdAt == request.time;
       allow update, delete: if false;
+    }
+
+    // 12. Trainers (Public read for published profiles, full RBAC CRUD for Admin)
+    match /trainers/{trainerId} {
+      allow get: if isValidId(trainerId) && (isAdmin() || existing().isPublished == true);
+      allow list: if isAdmin() || resource.data.isPublished == true;
+      allow create: if isValidId(trainerId)
+        && isAdmin()
+        && isValidTrainer(incoming())
+        && incoming().id == trainerId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(trainerId)
+        && isAdmin()
+        && isValidTrainer(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(trainerId) && isAdmin();
+    }
+
+    // 13. Public Assets (Admin-uploaded compressed images for static hosting compatibility)
+    match /public_assets/{assetId} {
+      allow get: if isValidId(assetId);
+      allow list: if isAdmin();
+      allow create: if isValidId(assetId)
+        && isAdmin()
+        && isValidPublicAsset(incoming())
+        && incoming().id == assetId
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(assetId) && isAdmin();
     }
   }
 }

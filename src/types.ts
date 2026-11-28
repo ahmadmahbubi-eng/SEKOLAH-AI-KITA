@@ -44,6 +44,89 @@ export interface MentorProfile {
   bio: string;
 }
 
+export interface TrainerExpertiseItem {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface TrainerPortfolioItem {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  mainFeatures: string[];
+  status: string;
+  demoUrl: string;
+  screenshotUrl: string;
+}
+
+export type TrainerSectionKey =
+  | 'expertise'
+  | 'background'
+  | 'tools'
+  | 'portfolio'
+  | 'whyLearn'
+  | 'statement'
+  | 'slogan'
+  | 'cta';
+
+export interface TrainerSectionVisibility {
+  expertise: boolean;
+  background: boolean;
+  tools: boolean;
+  portfolio: boolean;
+  whyLearn: boolean;
+  statement: boolean;
+  slogan: boolean;
+  cta: boolean;
+}
+
+export interface TrainerProfile {
+  id: string;
+  isPrimary: boolean;
+  isPublished: boolean;
+  displayOrder: number;
+  eyebrow: string;
+  sectionSubtitle: string;
+  roleBadge: string;
+  fullName: string;
+  titlePrimary: string;
+  titleSecondary: string;
+  pillarsLabel: string;
+  photoUrl: string;
+  headline: string;
+  subheadline: string;
+  bio: string;
+  expertiseTitle: string;
+  expertiseSubtitle: string;
+  expertise: TrainerExpertiseItem[];
+  backgroundTitle: string;
+  backgroundSubtitle: string;
+  background: string[];
+  toolsTitle: string;
+  toolsDisclaimer: string;
+  tools: string[];
+  portfolioTitle: string;
+  portfolioSubtitle: string;
+  portfolio: TrainerPortfolioItem[];
+  whyLearnTitle: string;
+  whyLearnPoints: string[];
+  whyLearnNarrative: string;
+  personalStatement: string;
+  personalStatementAuthor: string;
+  sloganLines: string[];
+  sloganEnglish: string;
+  ctaHeadline: string;
+  ctaSubheadline: string;
+  ctaButtonLabel: string;
+  sectionVisibility: TrainerSectionVisibility;
+  sectionOrder: TrainerSectionKey[];
+  createdAt?: Timestamp | unknown;
+  updatedAt?: Timestamp | unknown;
+}
+
 export interface TargetAudienceItem {
   role: string;
   desc: string;

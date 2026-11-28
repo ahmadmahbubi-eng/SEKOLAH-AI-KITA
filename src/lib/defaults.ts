@@ -6,6 +6,9 @@ import type {
   NotificationSettings,
   Program,
   ProjectItem,
+  TrainerProfile,
+  TrainerSectionKey,
+  TrainerSectionVisibility,
   WebsiteSettings,
 } from '../types';
 
@@ -251,4 +254,143 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
     'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} dengan nomor registrasi {{registrasi}} telah diverifikasi dan berstatus LUNAS.\n\nJadwal: {{tanggal}}\nLokasi: {{lokasi}}\n\nInformasi persiapan pelatihan akan terus kami sampaikan melalui Komunitas Sekolah AI Kita.',
+};
+
+export const DEFAULT_TRAINER_SECTION_ORDER: TrainerSectionKey[] = [
+  'expertise',
+  'background',
+  'tools',
+  'portfolio',
+  'whyLearn',
+  'statement',
+  'slogan',
+  'cta',
+];
+
+export const DEFAULT_TRAINER_SECTION_VISIBILITY: TrainerSectionVisibility = {
+  expertise: true,
+  background: true,
+  tools: true,
+  portfolio: true,
+  whyLearn: true,
+  statement: true,
+  slogan: true,
+  cta: true,
+};
+
+export const DEFAULT_PRIMARY_TRAINER: TrainerProfile = {
+  id: 'ahmad-mahbubi-an',
+  isPrimary: true,
+  isPublished: true,
+  displayOrder: 1,
+  eyebrow: 'MEET YOUR TRAINER',
+  sectionSubtitle: 'Kenali Pemateri Utama Anda',
+  roleBadge: 'MAIN TRAINER',
+  fullName: 'AHMAD MAHBUBI AN, S.H., M.Pd.',
+  titlePrimary: 'AI Practitioner & Education Innovator',
+  titleSecondary: 'Founder Sekolah AI Kita (SAKITA)',
+  pillarsLabel: 'Education • Technology • Innovation',
+  photoUrl: '',
+  headline: 'Dari Dunia Pendidikan Menuju Inovasi Digital.',
+  subheadline:
+    'Mengintegrasikan pengalaman dunia pendidikan, kepemimpinan, dan kecerdasan buatan untuk menciptakan solusi digital yang nyata dan membuka peluang baru di era AI.',
+  bio: 'Ahmad Mahbubi AN, S.H., M.Pd. merupakan seorang praktisi pendidikan, pimpinan pesantren, advokat, penulis, dan motivator yang mendalami Artificial Intelligence (AI) serta penerapannya dalam pengembangan aplikasi digital, transformasi pendidikan, dan inovasi bisnis.\n\nPengalaman langsung dalam memimpin dan mengelola lembaga pendidikan mendorongnya untuk mempelajari berbagai teknologi kecerdasan buatan dan mengembangkan solusi digital guna menjawab kebutuhan nyata dunia pendidikan.\n\nDengan pendekatan pembelajaran berbasis praktik, ia memanfaatkan teknologi AI untuk membangun aplikasi, mengembangkan sistem informasi, menciptakan konten digital, serta mengeksplorasi berbagai peluang usaha berbasis teknologi.\n\nMelalui Sekolah AI Kita (SAKITA), ia berkomitmen membantu para guru, kepala sekolah, pimpinan pesantren, pengusaha, dan masyarakat umum agar tidak hanya menjadi pengguna teknologi, tetapi juga mampu menjadi pencipta solusi digital dengan bantuan AI, tanpa harus memiliki latar belakang sebagai programmer.',
+  expertiseTitle: 'Areas of Expertise',
+  expertiseSubtitle: 'Kompetensi dan Bidang Keahlian',
+  expertise: [
+    {
+      id: 'exp-1',
+      icon: 'Cpu',
+      title: 'Artificial Intelligence & Generative AI',
+      description: 'Pemanfaatan kecerdasan buatan untuk produktivitas, kreativitas, dan inovasi.',
+    },
+    {
+      id: 'exp-2',
+      icon: 'Layers',
+      title: 'AI-Assisted Application Development',
+      description: 'Pengembangan aplikasi digital dengan bantuan teknologi AI.',
+    },
+    {
+      id: 'exp-3',
+      icon: 'Terminal',
+      title: 'Prompt Engineering',
+      description: 'Teknik menyusun instruksi yang efektif untuk mengoptimalkan kemampuan AI.',
+    },
+    {
+      id: 'exp-4',
+      icon: 'Blocks',
+      title: 'No-Code & AI-Assisted Development',
+      description: 'Pengembangan website dan aplikasi tanpa harus menguasai coding secara mendalam.',
+    },
+    {
+      id: 'exp-5',
+      icon: 'GraduationCap',
+      title: 'Digital Transformation in Education',
+      description: 'Digitalisasi sistem pengelolaan sekolah dan pesantren.',
+    },
+    {
+      id: 'exp-6',
+      icon: 'Clapperboard',
+      title: 'AI Content Creation',
+      description: 'Pembuatan konten visual, video, audio, dan materi digital dengan bantuan AI.',
+    },
+    {
+      id: 'exp-7',
+      icon: 'Briefcase',
+      title: 'AI for Business & Entrepreneurship',
+      description: 'Pemanfaatan AI untuk menciptakan produk, jasa, dan peluang usaha.',
+    },
+    {
+      id: 'exp-8',
+      icon: 'Compass',
+      title: 'Educational Leadership & Management',
+      description: 'Kepemimpinan dan pengelolaan lembaga pendidikan.',
+    },
+  ],
+  backgroundTitle: 'Professional Background',
+  backgroundSubtitle: 'Riwayat Aktivitas & Peran Profesional',
+  background: [
+    'Founder Sekolah AI Kita (SAKITA)',
+    'Praktisi Artificial Intelligence (AI)',
+    'Pengembang Aplikasi Berbasis AI',
+    'Pimpinan Pondok Qur’an Para Sahabat',
+    'Ketua Yayasan Para Sahabat',
+    'Advokat & Konsultan Hukum',
+    'Pengajar Al-Qur’an',
+    'Penulis & Motivator',
+    'Mahasiswa Program Doktoral (S3) Pendidikan Agama Islam, Universitas Islam Sultan Agung (UNISSULA)',
+  ],
+  toolsTitle: 'Powered by Modern AI Technologies',
+  toolsDisclaimer:
+    'Platform teknologi AI modern yang dipelajari dan digunakan dalam praktik pengembangan aplikasi. SAKITA merupakan lembaga pelatihan independen dan tidak berafiliasi resmi dengan perusahaan pemilik platform tersebut.',
+  tools: ['ChatGPT', 'Google Gemini', 'Google AI Studio', 'Lovable', 'Google Flow', 'Vercel'],
+  portfolioTitle: 'From Knowledge to Real Innovation',
+  portfolioSubtitle: 'Bukan Sekadar Teori, tetapi Karya Nyata.',
+  portfolio: [],
+  whyLearnTitle: 'Belajar dari Praktisi yang Memahami Kebutuhan Anda',
+  whyLearnPoints: [
+    'Memahami kebutuhan nyata sekolah dan pesantren.',
+    'Berpengalaman dalam pengelolaan lembaga pendidikan.',
+    'Menggunakan pendekatan pembelajaran berbasis praktik.',
+    'Mengajarkan pembuatan aplikasi dengan bantuan AI tanpa harus menguasai coding secara mendalam.',
+    'Membuka wawasan tentang peluang usaha dari keterampilan AI.',
+  ],
+  whyLearnNarrative:
+    'Anda tidak hanya akan belajar bagaimana menggunakan AI, tetapi juga bagaimana memanfaatkannya untuk menciptakan aplikasi, menyelesaikan persoalan nyata, meningkatkan produktivitas, dan membuka peluang penghasilan.',
+  personalStatement:
+    'Di era kecerdasan buatan, kita tidak harus menjadi seorang programmer untuk mulai menciptakan teknologi. Dengan ilmu, kreativitas, dan kemampuan memanfaatkan AI, kita dapat membangun solusi, memberikan manfaat, dan membuka peluang baru.',
+  personalStatementAuthor: 'Ahmad Mahbubi AN, S.H., M.Pd.',
+  sloganLines: [
+    'Berakar pada Nilai.',
+    'Bertumbuh dengan Ilmu.',
+    'Melangkah dengan Teknologi.',
+  ],
+  sloganEnglish: 'Rooted in Values. Powered by Innovation.',
+  ctaHeadline:
+    'Saatnya Anda Tidak Hanya Menjadi Pengguna AI, tetapi Menjadi Pencipta Solusi dengan AI.',
+  ctaSubheadline:
+    'Belajar langsung bersama praktisi pendidikan dan teknologi melalui pelatihan intensif berbasis proyek nyata.',
+  ctaButtonLabel: 'BELAJAR LANGSUNG BERSAMA PEMATERI',
+  sectionVisibility: DEFAULT_TRAINER_SECTION_VISIBILITY,
+  sectionOrder: DEFAULT_TRAINER_SECTION_ORDER,
 };

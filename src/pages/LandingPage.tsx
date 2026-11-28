@@ -28,14 +28,16 @@ import {
   X,
 } from 'lucide-react';
 import { BrandMark } from '../components/BrandMark';
+import { ResolvedAssetImage } from '../components/ResolvedAssetImage';
 import { CountdownTimer } from '../components/landing/CountdownTimer';
 import { HeroDashboardPreview } from '../components/landing/HeroDashboardPreview';
 import { LegalModal } from '../components/landing/LegalModal';
+import { TrainerProfileSection } from '../components/landing/TrainerProfileSection';
 import { useToast } from '../context/ToastContext';
-import { DEFAULT_PROGRAM, DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
+import { DEFAULT_PRIMARY_TRAINER, DEFAULT_PROGRAM, DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
 import { computeRemainingSeats, formatRupiah, toWhatsappLink } from '../lib/format';
-import { fetchPublicPrograms, fetchWebsiteSettings } from '../lib/sakitaService';
-import type { Program, WebsiteSettings } from '../types';
+import { fetchPublicPrograms, fetchPublicTrainers, fetchWebsiteSettings } from '../lib/sakitaService';
+import type { Program, TrainerProfile, WebsiteSettings } from '../types';
 
 interface LandingPageProps {
   navigate: (path: string) => void;
@@ -95,6 +97,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
   const { toast } = useToast();
   const [settings, setSettings] = useState<WebsiteSettings>(DEFAULT_WEBSITE_SETTINGS);
   const [programs, setPrograms] = useState<Program[]>([DEFAULT_PROGRAM]);
+  const [trainers, setTrainers] = useState<TrainerProfile[]>([DEFAULT_PRIMARY_TRAINER]);
   const [selectedProgramId, setSelectedProgramId] = useState<string>(DEFAULT_PROGRAM.id);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
@@ -105,12 +108,16 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
     let active = true;
     async function loadData() {
       try {
-        const [webSettings, dbPrograms] = await Promise.all([
+        const [webSettings, dbPrograms, dbTrainers] = await Promise.all([
           fetchWebsiteSettings(),
           fetchPublicPrograms(),
+          fetchPublicTrainers().catch(() => [] as TrainerProfile[]),
         ]);
         if (!active) return;
         setSettings(webSettings);
+        if (dbTrainers.length > 0) {
+          setTrainers(dbTrainers);
+        }
         const visiblePrograms = dbPrograms
           .filter((p) => p.status !== 'archived')
           .sort((a, b) => {
@@ -222,7 +229,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
             <BrandMark logoUrl={settings.logoUrl} brandName={settings.brandName || 'SAKITA'} variant="dark" />
           </a>
 
-          <nav aria-label="Navigasi Utama" className="hidden lg:flex items-center gap-7 text-sm font-medium text-[#94A3B8]">
+          <nav aria-label="Navigasi Utama" className="hidden lg:flex items-center gap-6 text-sm font-medium text-[#94A3B8]">
             <a href="#beranda" className="whitespace-nowrap shrink-0 transition-colors hover:text-[#F8FAFC]">
               Beranda
             </a>
@@ -234,6 +241,9 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
             </a>
             <a href="#materi" className="whitespace-nowrap shrink-0 transition-colors hover:text-[#F8FAFC]">
               Materi
+            </a>
+            <a href="#pemateri" className="whitespace-nowrap shrink-0 transition-colors hover:text-[#F8FAFC]">
+              Pemateri
             </a>
             <a href="#fasilitas" className="whitespace-nowrap shrink-0 transition-colors hover:text-[#F8FAFC]">
               Fasilitas
@@ -271,6 +281,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                 { href: '#tentang', label: 'Tentang SAKITA' },
                 { href: '#program', label: 'Program Pelatihan' },
                 { href: '#materi', label: 'Materi' },
+                { href: '#pemateri', label: 'Pemateri' },
                 { href: '#fasilitas', label: 'Fasilitas' },
                 { href: '#faq', label: 'FAQ' },
               ].map((link) => (
@@ -369,10 +380,10 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
               >
                 {heroBannerUrl ? (
                   <div className="relative h-full min-h-[360px] overflow-hidden rounded-2xl border border-slate-800 bg-[#0F172A]">
-                    <img
+                    <ResolvedAssetImage
                       src={heroBannerUrl}
                       alt={`Banner ${activeProgram.name}`}
-                      referrerPolicy="no-referrer"
+                      loading="eager"
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#080F1D]/90 via-[#080F1D]/40 to-transparent p-5">
@@ -795,21 +806,25 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
         </section>
 
         {/* ===================================================================
-            F. PROFIL MENTOR (Hidden automatically when not configured by admin)
+            F. PROFIL PEMATERI UTAMA (Managed via Admin -> Manajemen Pemateri)
            =================================================================== */}
-        {showMentorSection && (
+        <TrainerProfileSection
+          trainers={trainers}
+          activeProgram={activeProgram}
+          moduleCount={moduleCount}
+          onRegister={() => goToRegister()}
+        />
+
+        {showMentorSection && trainers.length === 0 && (
           <section className="border-b border-slate-800/80 py-20 lg:py-24">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <p className="text-xs font-medium tracking-wide text-[#22D3EE]">Profil Mentor</p>
               <div className="mt-6 grid grid-cols-1 items-center gap-8 rounded-2xl border border-slate-800 bg-[#0F172A] p-7 lg:grid-cols-12 lg:p-10">
                 <div className="lg:col-span-4">
                   {settings.mentor.photoUrl ? (
-                    <img
+                    <ResolvedAssetImage
                       src={settings.mentor.photoUrl}
                       alt={settings.mentor.name}
-                      loading="lazy"
-                      decoding="async"
-                      referrerPolicy="no-referrer"
                       className="aspect-[4/4] w-full rounded-xl object-cover border border-slate-800"
                     />
                   ) : (
@@ -924,12 +939,9 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                             aria-label={`Perbesar ${photo.caption || `Foto ${activeProgram.location}`}`}
                             className="block w-full overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22D3EE]"
                           >
-                            <img
+                            <ResolvedAssetImage
                               src={photo.url}
                               alt={photo.caption || `Foto ${activeProgram.location}`}
-                              loading="lazy"
-                              decoding="async"
-                              referrerPolicy="no-referrer"
                               className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                             />
                           </button>
@@ -1269,10 +1281,10 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
               <X className="h-4 w-4" />
             </button>
             <div className="flex max-h-[78vh] items-center justify-center bg-[#080F1D]">
-              <img
+              <ResolvedAssetImage
                 src={previewPhoto.url}
                 alt={previewPhoto.caption}
-                referrerPolicy="no-referrer"
+                loading="eager"
                 className="max-h-[78vh] w-auto max-w-full object-contain"
               />
             </div>

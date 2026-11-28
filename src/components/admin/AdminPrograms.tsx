@@ -18,6 +18,7 @@ import { useToast } from '../../context/ToastContext';
 import { INITIAL_FACILITIES, INITIAL_PROJECTS } from '../../lib/defaults';
 import { computeRemainingSeats, formatRupiah } from '../../lib/format';
 import { saveProgram, uploadAdminAsset } from '../../lib/sakitaService';
+import { ResolvedAssetImage } from '../ResolvedAssetImage';
 import type { Program, ProgramStatus, ProjectItem, TargetAudienceItem } from '../../types';
 
 interface AdminProgramsProps {
@@ -785,10 +786,9 @@ export function AdminPrograms({ programs, onPreviewProgram }: AdminProgramsProps
                     </div>
                     {editing.program.bannerUrl && (
                       <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                        <img
+                        <ResolvedAssetImage
                           src={editing.program.bannerUrl}
                           alt="Pratinjau banner pelatihan"
-                          referrerPolicy="no-referrer"
                           className="max-h-48 w-full object-cover"
                         />
                       </div>

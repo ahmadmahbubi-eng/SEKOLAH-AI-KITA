@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -16,7 +17,10 @@ import {
   DEFAULT_BANK_SETTINGS,
   DEFAULT_COMMUNITY_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_PRIMARY_TRAINER,
   DEFAULT_PROGRAM,
+  DEFAULT_TRAINER_SECTION_ORDER,
+  DEFAULT_TRAINER_SECTION_VISIBILITY,
   DEFAULT_WEBSITE_SETTINGS,
   OFFICIAL_HOTEL_GALLERY,
 } from './defaults';
@@ -30,6 +34,8 @@ import type {
   Program,
   Registration,
   RegistrationTicket,
+  TrainerProfile,
+  TrainerSectionKey,
   WebsiteSettings,
 } from '../types';
 
@@ -54,6 +60,59 @@ export function apiUrl(path: string): string {
   const rawBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '';
   if (!rawBase) return path;
   return `${rawBase.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+export function isSafeHttpUrl(raw: string): boolean {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+export function isSafeImageUrl(raw: string): boolean {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('firestore-asset:')) {
+    return /^firestore-asset:[a-zA-Z0-9_-]{12,128}$/.test(trimmed);
+  }
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return true;
+  }
+  return isSafeHttpUrl(trimmed);
+}
+
+const publicAssetObjectUrlCache = new Map<string, string>();
+
+export async function resolvePublicAssetUrl(rawUrl: string): Promise<string> {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed || !isSafeImageUrl(trimmed)) return '';
+  if (!trimmed.startsWith('firestore-asset:')) return trimmed;
+
+  const cached = publicAssetObjectUrlCache.get(trimmed);
+  if (cached) return cached;
+
+  const assetId = trimmed.slice('firestore-asset:'.length);
+  const snap = await getDoc(doc(db, 'public_assets', assetId));
+  if (!snap.exists()) return '';
+  const payload = snap.data() as { dataUrl?: string; mimeType?: string };
+  if (!payload.dataUrl || !payload.dataUrl.includes(',')) return '';
+  if (!/^data:image\/(jpeg|png|webp);base64,/i.test(payload.dataUrl)) return '';
+
+  const [header, base64] = payload.dataUrl.split(',');
+  const mimeMatch = header.match(/data:([^;]+);base64/i);
+  const mimeType = mimeMatch?.[1] || payload.mimeType || 'image/jpeg';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  publicAssetObjectUrlCache.set(trimmed, blobUrl);
+  return blobUrl;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -284,6 +343,53 @@ export async function fetchPublicPrograms(): Promise<Program[]> {
     const q = query(collection(db, path), where('status', 'in', ['open', 'closed', 'archived']));
     const snap = await getDocs(q);
     return snap.docs.map((d) => normalizeLegacyProgramDates({ ...(d.data() as Program), id: d.id }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+export function normalizeTrainerProfile(raw: Partial<TrainerProfile>, id: string): TrainerProfile {
+  const base = id === DEFAULT_PRIMARY_TRAINER.id ? DEFAULT_PRIMARY_TRAINER : DEFAULT_PRIMARY_TRAINER;
+  const validKeys = new Set<TrainerSectionKey>(DEFAULT_TRAINER_SECTION_ORDER);
+  const rawOrder = Array.isArray(raw.sectionOrder) ? raw.sectionOrder : DEFAULT_TRAINER_SECTION_ORDER;
+  const dedupedOrder = rawOrder.filter((k): k is TrainerSectionKey => validKeys.has(k));
+  const mergedOrder = [
+    ...dedupedOrder,
+    ...DEFAULT_TRAINER_SECTION_ORDER.filter((k) => !dedupedOrder.includes(k)),
+  ];
+
+  return {
+    ...base,
+    ...raw,
+    id,
+    isPrimary: typeof raw.isPrimary === 'boolean' ? raw.isPrimary : id === DEFAULT_PRIMARY_TRAINER.id,
+    isPublished: typeof raw.isPublished === 'boolean' ? raw.isPublished : true,
+    displayOrder: typeof raw.displayOrder === 'number' ? raw.displayOrder : 1,
+    expertise: Array.isArray(raw.expertise) ? raw.expertise : base.expertise,
+    background: Array.isArray(raw.background) ? raw.background : base.background,
+    tools: Array.isArray(raw.tools) ? raw.tools : base.tools,
+    portfolio: Array.isArray(raw.portfolio) ? raw.portfolio : [],
+    whyLearnPoints: Array.isArray(raw.whyLearnPoints) ? raw.whyLearnPoints : base.whyLearnPoints,
+    sloganLines: Array.isArray(raw.sloganLines) ? raw.sloganLines : base.sloganLines,
+    sectionVisibility: {
+      ...DEFAULT_TRAINER_SECTION_VISIBILITY,
+      ...(raw.sectionVisibility || {}),
+    },
+    sectionOrder: mergedOrder,
+  };
+}
+
+export async function fetchPublicTrainers(): Promise<TrainerProfile[]> {
+  const path = 'trainers';
+  try {
+    const q = query(collection(db, path), where('isPublished', '==', true));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => normalizeTrainerProfile(d.data() as Partial<TrainerProfile>, d.id))
+      .sort((a, b) => {
+        if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+        return (a.displayOrder || 0) - (b.displayOrder || 0);
+      });
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
   }
@@ -898,6 +1004,21 @@ export async function bootstrapAdminEnvironment(): Promise<void> {
     handleFirestoreError(error, OperationType.WRITE, `programs/${DEFAULT_PROGRAM.id}`);
   }
 
+  // Ensure default primary trainer profile exists in Firestore
+  const trainerRef = doc(db, 'trainers', DEFAULT_PRIMARY_TRAINER.id);
+  try {
+    const trainerSnap = await getDoc(trainerRef);
+    if (!trainerSnap.exists()) {
+      await setDoc(trainerRef, {
+        ...DEFAULT_PRIMARY_TRAINER,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `trainers/${DEFAULT_PRIMARY_TRAINER.id}`);
+  }
+
   // Ensure default settings docs exist
   const settingsSeeds: Array<{ col: string; data: Record<string, unknown> }> = [
     { col: 'website_settings', data: { ...DEFAULT_WEBSITE_SETTINGS, updatedAt: serverTimestamp() } },
@@ -1418,25 +1539,283 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
   );
 }
 
+export async function saveTrainerProfile(
+  trainer: TrainerProfile,
+  isNew: boolean,
+  allTrainers?: TrainerProfile[],
+): Promise<void> {
+  const cleanId = trainer.id
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100);
+  if (cleanId.length < 3) {
+    throw new Error('ID pemateri harus terdiri dari minimal 3 karakter alfanumerik.');
+  }
+
+  const fullName = trainer.fullName.trim().slice(0, 160);
+  if (fullName.length < 2) {
+    throw new Error('Nama lengkap pemateri wajib diisi minimal 2 karakter.');
+  }
+
+  const rawPhoto = (trainer.photoUrl || '').trim().slice(0, 500);
+  if (rawPhoto && !isSafeImageUrl(rawPhoto)) {
+    throw new Error('URL foto pemateri tidak valid. Gunakan unggahan file atau URL https:// yang aman.');
+  }
+
+  const cleanExpertise = (trainer.expertise || [])
+    .filter((item) => item.title.trim().length > 0)
+    .slice(0, 20)
+    .map((item, idx) => ({
+      id: (item.id || `exp-${idx + 1}`).trim().slice(0, 60),
+      icon: (item.icon || 'Cpu').trim().slice(0, 40),
+      title: item.title.trim().slice(0, 140),
+      description: item.description.trim().slice(0, 400),
+    }));
+
+  const cleanBackground = (trainer.background || [])
+    .map((b) => b.trim().slice(0, 240))
+    .filter(Boolean)
+    .slice(0, 25);
+
+  const cleanTools = (trainer.tools || [])
+    .map((t) => t.trim().slice(0, 80))
+    .filter(Boolean)
+    .slice(0, 20);
+
+  const cleanPortfolio = (trainer.portfolio || [])
+    .filter((item) => item.name.trim().length > 0)
+    .slice(0, 20)
+    .map((item, idx) => {
+      const demoUrl = (item.demoUrl || '').trim().slice(0, 500);
+      if (demoUrl && !isSafeHttpUrl(demoUrl)) {
+        throw new Error(`Link demo untuk "${item.name}" harus diawali https:// atau http://.`);
+      }
+      const screenshotUrl = (item.screenshotUrl || '').trim().slice(0, 500);
+      if (screenshotUrl && !isSafeImageUrl(screenshotUrl)) {
+        throw new Error(`URL screenshot untuk "${item.name}" tidak valid.`);
+      }
+      return {
+        id: (item.id || `port-${idx + 1}`).trim().slice(0, 60),
+        name: item.name.trim().slice(0, 140),
+        category: (item.category || '').trim().slice(0, 80),
+        description: (item.description || '').trim().slice(0, 600),
+        mainFeatures: (item.mainFeatures || [])
+          .map((f) => f.trim().slice(0, 160))
+          .filter(Boolean)
+          .slice(0, 10),
+        status: (item.status || 'Aktif').trim().slice(0, 60),
+        demoUrl,
+        screenshotUrl,
+      };
+    });
+
+  const cleanWhyLearnPoints = (trainer.whyLearnPoints || [])
+    .map((p) => p.trim().slice(0, 240))
+    .filter(Boolean)
+    .slice(0, 10);
+
+  const cleanSloganLines = (trainer.sloganLines || [])
+    .map((line) => line.trim().slice(0, 120))
+    .filter(Boolean)
+    .slice(0, 6);
+
+  const validSectionKeys = new Set<TrainerSectionKey>(DEFAULT_TRAINER_SECTION_ORDER);
+  const rawOrder = Array.isArray(trainer.sectionOrder)
+    ? trainer.sectionOrder.filter((k): k is TrainerSectionKey => validSectionKeys.has(k))
+    : DEFAULT_TRAINER_SECTION_ORDER;
+  const cleanSectionOrder = [
+    ...rawOrder,
+    ...DEFAULT_TRAINER_SECTION_ORDER.filter((k) => !rawOrder.includes(k)),
+  ].slice(0, 10);
+
+  const cleanVisibility = {
+    expertise: Boolean(trainer.sectionVisibility?.expertise ?? true),
+    background: Boolean(trainer.sectionVisibility?.background ?? true),
+    tools: Boolean(trainer.sectionVisibility?.tools ?? true),
+    portfolio: Boolean(trainer.sectionVisibility?.portfolio ?? true),
+    whyLearn: Boolean(trainer.sectionVisibility?.whyLearn ?? true),
+    statement: Boolean(trainer.sectionVisibility?.statement ?? true),
+    slogan: Boolean(trainer.sectionVisibility?.slogan ?? true),
+    cta: Boolean(trainer.sectionVisibility?.cta ?? true),
+  };
+
+  const payload = {
+    isPrimary: Boolean(trainer.isPrimary),
+    isPublished: Boolean(trainer.isPublished),
+    displayOrder: Math.max(0, Math.min(1000, Math.round(Number(trainer.displayOrder) || 1))),
+    eyebrow: (trainer.eyebrow || '').trim().slice(0, 80),
+    sectionSubtitle: (trainer.sectionSubtitle || '').trim().slice(0, 160),
+    roleBadge: (trainer.roleBadge || '').trim().slice(0, 60),
+    fullName,
+    titlePrimary: (trainer.titlePrimary || '').trim().slice(0, 180),
+    titleSecondary: (trainer.titleSecondary || '').trim().slice(0, 180),
+    pillarsLabel: (trainer.pillarsLabel || '').trim().slice(0, 180),
+    photoUrl: rawPhoto,
+    headline: (trainer.headline || '').trim().slice(0, 240),
+    subheadline: (trainer.subheadline || '').trim().slice(0, 500),
+    bio: (trainer.bio || '').trim().slice(0, 6000),
+    expertiseTitle: (trainer.expertiseTitle || '').trim().slice(0, 120),
+    expertiseSubtitle: (trainer.expertiseSubtitle || '').trim().slice(0, 180),
+    expertise: cleanExpertise,
+    backgroundTitle: (trainer.backgroundTitle || '').trim().slice(0, 120),
+    backgroundSubtitle: (trainer.backgroundSubtitle || '').trim().slice(0, 180),
+    background: cleanBackground,
+    toolsTitle: (trainer.toolsTitle || '').trim().slice(0, 140),
+    toolsDisclaimer: (trainer.toolsDisclaimer || '').trim().slice(0, 500),
+    tools: cleanTools,
+    portfolioTitle: (trainer.portfolioTitle || '').trim().slice(0, 140),
+    portfolioSubtitle: (trainer.portfolioSubtitle || '').trim().slice(0, 200),
+    portfolio: cleanPortfolio,
+    whyLearnTitle: (trainer.whyLearnTitle || '').trim().slice(0, 180),
+    whyLearnPoints: cleanWhyLearnPoints,
+    whyLearnNarrative: (trainer.whyLearnNarrative || '').trim().slice(0, 1000),
+    personalStatement: (trainer.personalStatement || '').trim().slice(0, 1200),
+    personalStatementAuthor: (trainer.personalStatementAuthor || '').trim().slice(0, 160),
+    sloganLines: cleanSloganLines,
+    sloganEnglish: (trainer.sloganEnglish || '').trim().slice(0, 180),
+    ctaHeadline: (trainer.ctaHeadline || '').trim().slice(0, 240),
+    ctaSubheadline: (trainer.ctaSubheadline || '').trim().slice(0, 400),
+    ctaButtonLabel: (trainer.ctaButtonLabel || '').trim().slice(0, 100),
+    sectionVisibility: cleanVisibility,
+    sectionOrder: cleanSectionOrder,
+  };
+
+  const ref = doc(db, 'trainers', cleanId);
+  try {
+    if (isNew) {
+      await setDoc(ref, {
+        id: cleanId,
+        ...payload,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const existingSnap = await getDoc(ref);
+      if (!existingSnap.exists()) {
+        await setDoc(ref, {
+          id: cleanId,
+          ...payload,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await updateDoc(ref, {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+
+    if (payload.isPrimary && allTrainers && allTrainers.length > 0) {
+      const othersToDemote = allTrainers.filter(
+        (other) => other.id !== cleanId && other.isPrimary,
+      );
+      await Promise.all(
+        othersToDemote.map((other) =>
+          updateDoc(doc(db, 'trainers', other.id), {
+            isPrimary: false,
+            updatedAt: serverTimestamp(),
+          }),
+        ),
+      );
+    }
+  } catch (error) {
+    handleFirestoreError(error, isNew ? OperationType.CREATE : OperationType.UPDATE, `trainers/${cleanId}`);
+  }
+
+  await logAdminAudit(
+    isNew ? 'TAMBAH_PEMATERI' : 'UPDATE_PEMATERI',
+    'trainer',
+    cleanId,
+    `${isNew ? 'Menambahkan' : 'Memperbarui'} profil pemateri "${payload.fullName}" (Utama: ${payload.isPrimary ? 'Ya' : 'Tidak'}, Publik: ${payload.isPublished ? 'Ya' : 'Draft'}).`,
+  );
+}
+
+export async function deleteTrainerProfile(trainer: TrainerProfile): Promise<void> {
+  const path = `trainers/${trainer.id}`;
+  try {
+    await deleteDoc(doc(db, 'trainers', trainer.id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+  await logAdminAudit(
+    'HAPUS_PEMATERI',
+    'trainer',
+    trainer.id,
+    `Menghapus profil pemateri "${trainer.fullName}".`,
+  );
+}
+
 export async function uploadAdminAsset(file: File): Promise<string> {
-  const headers = await getAdminAuthHeaders();
-  const formData = new FormData();
-  formData.append('file', file);
-  const resp = await fetch('/api/uploads/asset', {
-    method: 'POST',
-    headers,
-    body: formData,
-  });
-  if (!isJsonResponse(resp)) {
-    throw new Error(
-      'Unggah file langsung tidak tersedia pada hosting statis. Silakan tempel URL gambar langsung pada kolom URL.',
-    );
+  const lowerType = (file.type || '').toLowerCase();
+  const lowerName = (file.name || '').toLowerCase();
+  const isJpg = lowerType === 'image/jpeg' || lowerType === 'image/jpg' || /\.(jpe?g)$/.test(lowerName);
+  const isPng = lowerType === 'image/png' || lowerName.endsWith('.png');
+  const isWebp = lowerType === 'image/webp' || lowerName.endsWith('.webp');
+
+  if (!isJpg && !isPng && !isWebp) {
+    throw new Error('Format gambar tidak didukung. Gunakan JPG, PNG, atau WEBP.');
   }
-  const data = (await resp.json()) as { url?: string; error?: string };
-  if (!resp.ok || !data.url) {
-    throw new Error(data.error || 'Gagal mengunggah gambar.');
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Ukuran gambar melebihi batas maksimal 5 MB.');
   }
-  return data.url;
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Sesi admin tidak aktif. Silakan login kembali.');
+  }
+
+  let dataUrl = await readFileAsDataUrl(file);
+  let finalMime: 'image/jpeg' | 'image/png' | 'image/webp' = isPng
+    ? 'image/png'
+    : isWebp
+      ? 'image/webp'
+      : 'image/jpeg';
+
+  const strictAssetDataUrlPattern = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+  const attempts: Array<{ maxDim: number; quality: number }> = [
+    { maxDim: 1400, quality: 0.9 },
+    { maxDim: 1200, quality: 0.84 },
+    { maxDim: 960, quality: 0.76 },
+  ];
+
+  for (const step of attempts) {
+    if (dataUrl.length <= 820_000 && strictAssetDataUrlPattern.test(dataUrl)) {
+      break;
+    }
+    dataUrl = await compressImageDataUrl(dataUrl, step.maxDim, step.quality);
+    finalMime = 'image/jpeg';
+  }
+
+  const headerMimeMatch = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,[A-Za-z0-9+/=]+$/);
+  if (!headerMimeMatch) {
+    throw new Error('Format file gambar tidak valid setelah pemrosesan.');
+  }
+  finalMime = headerMimeMatch[1] as 'image/jpeg' | 'image/png' | 'image/webp';
+
+  if (dataUrl.length > 880_000) {
+    throw new Error('Ukuran gambar masih terlalu besar setelah optimasi. Gunakan gambar beresolusi lebih ringkas.');
+  }
+
+  const assetId = makeClientId('ast');
+  const cleanName = (file.name || 'sakita-asset.jpg').trim().slice(0, 200) || 'sakita-asset.jpg';
+  try {
+    await setDoc(doc(db, 'public_assets', assetId), {
+      id: assetId,
+      fileName: cleanName,
+      mimeType: finalMime,
+      dataUrl,
+      uploadedByUid: user.uid,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `public_assets/${assetId}`);
+  }
+
+  return `firestore-asset:${assetId}`;
 }
 
 export async function sendTestAdminNotification(): Promise<{

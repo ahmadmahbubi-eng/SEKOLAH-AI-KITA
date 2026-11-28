@@ -383,6 +383,111 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "adminUid", "adminEmail", "action", "targetType", "targetId", "details", "createdAt"]
+    },
+    "Trainer": {
+      "title": "Trainer",
+      "description": "Profil pemateri utama dan pemateri pelatihan SAKITA yang dapat dikelola penuh melalui dashboard admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "isPrimary": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "displayOrder": { "type": "number" },
+        "eyebrow": { "type": "string", "maxLength": 80 },
+        "sectionSubtitle": { "type": "string", "maxLength": 160 },
+        "roleBadge": { "type": "string", "maxLength": 60 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "titlePrimary": { "type": "string", "maxLength": 180 },
+        "titleSecondary": { "type": "string", "maxLength": 180 },
+        "pillarsLabel": { "type": "string", "maxLength": 180 },
+        "photoUrl": { "type": "string", "maxLength": 500 },
+        "headline": { "type": "string", "maxLength": 240 },
+        "subheadline": { "type": "string", "maxLength": 500 },
+        "bio": { "type": "string", "maxLength": 6000 },
+        "expertiseTitle": { "type": "string", "maxLength": 120 },
+        "expertiseSubtitle": { "type": "string", "maxLength": 180 },
+        "expertise": { "type": "array" },
+        "backgroundTitle": { "type": "string", "maxLength": 120 },
+        "backgroundSubtitle": { "type": "string", "maxLength": 180 },
+        "background": { "type": "array" },
+        "toolsTitle": { "type": "string", "maxLength": 140 },
+        "toolsDisclaimer": { "type": "string", "maxLength": 500 },
+        "tools": { "type": "array" },
+        "portfolioTitle": { "type": "string", "maxLength": 140 },
+        "portfolioSubtitle": { "type": "string", "maxLength": 200 },
+        "portfolio": { "type": "array" },
+        "whyLearnTitle": { "type": "string", "maxLength": 180 },
+        "whyLearnPoints": { "type": "array" },
+        "whyLearnNarrative": { "type": "string", "maxLength": 1000 },
+        "personalStatement": { "type": "string", "maxLength": 1200 },
+        "personalStatementAuthor": { "type": "string", "maxLength": 160 },
+        "sloganLines": { "type": "array" },
+        "sloganEnglish": { "type": "string", "maxLength": 180 },
+        "ctaHeadline": { "type": "string", "maxLength": 240 },
+        "ctaSubheadline": { "type": "string", "maxLength": 400 },
+        "ctaButtonLabel": { "type": "string", "maxLength": 100 },
+        "sectionVisibility": { "type": "object" },
+        "sectionOrder": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "isPrimary",
+        "isPublished",
+        "displayOrder",
+        "eyebrow",
+        "sectionSubtitle",
+        "roleBadge",
+        "fullName",
+        "titlePrimary",
+        "titleSecondary",
+        "pillarsLabel",
+        "photoUrl",
+        "headline",
+        "subheadline",
+        "bio",
+        "expertiseTitle",
+        "expertiseSubtitle",
+        "expertise",
+        "backgroundTitle",
+        "backgroundSubtitle",
+        "background",
+        "toolsTitle",
+        "toolsDisclaimer",
+        "tools",
+        "portfolioTitle",
+        "portfolioSubtitle",
+        "portfolio",
+        "whyLearnTitle",
+        "whyLearnPoints",
+        "whyLearnNarrative",
+        "personalStatement",
+        "personalStatementAuthor",
+        "sloganLines",
+        "sloganEnglish",
+        "ctaHeadline",
+        "ctaSubheadline",
+        "ctaButtonLabel",
+        "sectionVisibility",
+        "sectionOrder",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PublicAsset": {
+      "title": "PublicAsset",
+      "description": "Aset gambar publik terkompresi (foto pemateri, screenshot portofolio, media CMS) yang diunggah admin agar kompatibel dengan hosting statis.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 12, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+        "dataUrl": { "type": "string", "minLength": 20, "maxLength": 900000 },
+        "uploadedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "fileName", "mimeType", "dataUrl", "uploadedByUid", "createdAt"]
     }
   },
   "firestore": {
@@ -433,6 +538,14 @@
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "Audit log aktivitas admin yang tidak dapat diubah."
+    },
+    "/trainers/{trainerId}": {
+      "schema": { "$ref": "#/entities/Trainer" },
+      "description": "Profil pemateri SAKITA (publik untuk yang dipublikasikan, penuh untuk admin)."
+    },
+    "/public_assets/{assetId}": {
+      "schema": { "$ref": "#/entities/PublicAsset" },
+      "description": "Aset gambar publik terkompresi yang diunggah oleh admin."
     }
   }
 }

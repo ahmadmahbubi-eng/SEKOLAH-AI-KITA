@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
+  Award,
   Bell,
   BookOpen,
   CheckSquare,
@@ -23,6 +24,7 @@ import { AdminOverview } from '../components/admin/AdminOverview';
 import { AdminParticipants } from '../components/admin/AdminParticipants';
 import { AdminPrograms } from '../components/admin/AdminPrograms';
 import { AdminSettingsPanels } from '../components/admin/AdminSettingsPanels';
+import { AdminTrainers } from '../components/admin/AdminTrainers';
 import { AdminVerification } from '../components/admin/AdminVerification';
 import { AdminWebsiteCMS } from '../components/admin/AdminWebsiteCMS';
 import { useAuth } from '../context/AuthContext';
@@ -30,9 +32,11 @@ import {
   DEFAULT_BANK_SETTINGS,
   DEFAULT_COMMUNITY_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_PROGRAM,
   DEFAULT_WEBSITE_SETTINGS,
 } from '../lib/defaults';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { normalizeTrainerProfile } from '../lib/sakitaService';
 import type {
   AuditLog,
   BankSettings,
@@ -42,6 +46,7 @@ import type {
   Payment,
   Program,
   Registration,
+  TrainerProfile,
   WebsiteSettings,
 } from '../types';
 
@@ -56,6 +61,7 @@ type AdminSection =
   | 'keuangan'
   | 'komunitas'
   | 'program'
+  | 'pemateri'
   | 'website'
   | 'notifikasi'
   | 'laporan'
@@ -72,6 +78,7 @@ const SIDEBAR_ITEMS: Array<{
   { id: 'keuangan', label: 'Keuangan', icon: Wallet },
   { id: 'komunitas', label: 'Komunitas', icon: MessageSquareHeart },
   { id: 'program', label: 'Program Pelatihan', icon: BookOpen },
+  { id: 'pemateri', label: 'Manajemen Pemateri', icon: Award },
   { id: 'website', label: 'Kelola Website', icon: Globe },
   { id: 'notifikasi', label: 'Notifikasi', icon: Bell },
   { id: 'laporan', label: 'Laporan', icon: FileBarChart2 },
@@ -85,6 +92,7 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
   const [selectedProgramId, setSelectedProgramId] = useState<string>('all');
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [trainers, setTrainers] = useState<TrainerProfile[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [websiteSettings, setWebsiteSettings] = useState<WebsiteSettings>(DEFAULT_WEBSITE_SETTINGS);
@@ -113,6 +121,22 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
           setPrograms(snap.docs.map((d) => ({ ...(d.data() as Program), id: d.id })));
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'programs'),
+      ),
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'trainers'),
+        (snap) => {
+          const list = snap.docs
+            .map((d) => normalizeTrainerProfile(d.data() as Partial<TrainerProfile>, d.id))
+            .sort((a, b) => {
+              if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+              return (a.displayOrder || 0) - (b.displayOrder || 0);
+            });
+          setTrainers(list);
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'trainers'),
       ),
     );
 
@@ -419,6 +443,13 @@ export function AdminDashboardPage({ navigate }: AdminDashboardPageProps) {
               <AdminPrograms
                 programs={programs}
                 onPreviewProgram={(slug) => navigate(`/program/${encodeURIComponent(slug)}`)}
+              />
+            )}
+
+            {section === 'pemateri' && (
+              <AdminTrainers
+                trainers={trainers}
+                activeProgram={programs.find((p) => p.isFeatured) || programs[0] || DEFAULT_PROGRAM}
               />
             )}
 

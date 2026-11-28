@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { saveWebsiteSettings, uploadAdminAsset } from '../../lib/sakitaService';
+import { ResolvedAssetImage } from '../ResolvedAssetImage';
 import type { WebsiteSettings } from '../../types';
 
 interface AdminWebsiteCMSProps {
@@ -158,7 +159,7 @@ export function AdminWebsiteCMS({ settings }: AdminWebsiteCMSProps) {
                   )}
                 </div>
                 {form.logoUrl && (
-                  <img
+                  <ResolvedAssetImage
                     src={form.logoUrl}
                     alt="Preview logo"
                     className="mt-2 h-10 rounded border border-slate-200 bg-slate-900 p-1.5 object-contain"
@@ -310,7 +311,7 @@ export function AdminWebsiteCMS({ settings }: AdminWebsiteCMSProps) {
                     />
                   </label>
                   {form.mentor.photoUrl && (
-                    <img
+                    <ResolvedAssetImage
                       src={form.mentor.photoUrl}
                       alt="Preview mentor"
                       className="h-14 w-14 rounded-lg border border-slate-200 object-cover"
@@ -359,7 +360,7 @@ export function AdminWebsiteCMS({ settings }: AdminWebsiteCMSProps) {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {form.hotelGallery.map((item, idx) => (
                   <div key={`${item.url}-${idx}`} className="overflow-hidden rounded-xl border border-slate-200">
-                    <img
+                    <ResolvedAssetImage
                       src={item.url}
                       alt={item.caption}
                       className="aspect-[4/3] w-full object-cover"

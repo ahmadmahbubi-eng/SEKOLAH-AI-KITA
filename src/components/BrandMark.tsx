@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { OFFICIAL_SAKITA_LOGO } from '../lib/defaults';
+import { ResolvedAssetImage } from './ResolvedAssetImage';
 
 interface BrandMarkProps {
   logoUrl?: string;
@@ -10,34 +10,10 @@ interface BrandMarkProps {
 const WEB_OPTIMIZED_SAKITA_LOGO = '/assets/sakita-logo-web.png';
 
 export function BrandMark({ logoUrl, brandName = 'SAKITA', variant = 'dark' }: BrandMarkProps) {
-  const [imgError, setImgError] = useState(false);
   const rawLogo = logoUrl?.trim() || OFFICIAL_SAKITA_LOGO;
   const resolvedLogo = rawLogo === OFFICIAL_SAKITA_LOGO ? WEB_OPTIMIZED_SAKITA_LOGO : rawLogo;
 
-  if (resolvedLogo && !imgError) {
-    return (
-      <span className="inline-flex items-center whitespace-nowrap shrink-0">
-        <span
-          className={`inline-flex items-center justify-center rounded-lg ${
-            variant === 'dark' ? 'bg-white px-2.5 py-1 shadow-sm' : 'bg-white py-0.5'
-          }`}
-        >
-          <img
-            src={resolvedLogo}
-            alt={brandName}
-            width={108}
-            height={36}
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={() => setImgError(true)}
-            className="h-9 w-auto max-w-[160px] object-contain"
-          />
-        </span>
-      </span>
-    );
-  }
-
-  return (
+  const fallbackMark = (
     <span className="inline-flex items-center gap-2.5 whitespace-nowrap shrink-0">
       <span
         className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-bold tracking-tight ${
@@ -58,4 +34,20 @@ export function BrandMark({ logoUrl, brandName = 'SAKITA', variant = 'dark' }: B
       </span>
     </span>
   );
+
+  if (resolvedLogo) {
+    return (
+      <ResolvedAssetImage
+        src={resolvedLogo}
+        alt={brandName}
+        loading="eager"
+        className={`h-9 w-auto max-w-[160px] rounded-lg object-contain ${
+          variant === 'dark' ? 'bg-white px-2.5 py-1 shadow-sm' : 'bg-white py-0.5'
+        }`}
+        fallback={fallbackMark}
+      />
+    );
+  }
+
+  return fallbackMark;
 }
