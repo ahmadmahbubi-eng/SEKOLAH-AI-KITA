@@ -124,18 +124,61 @@ export const INITIAL_FAQS: FaqItem[] = [
   {
     question: 'Bagaimana cara bergabung dengan komunitas?',
     answer:
-      'Tautan undangan Komunitas Sekolah AI Kita akan langsung terbuka pada halaman sukses pendaftaran segera setelah Anda berhasil mengunggah bukti transfer.',
+      'Tautan undangan resmi Komunitas Sekolah AI Kita (SAKITA) akan terbuka secara otomatis pada halaman status pendaftaran Anda setelah pembayaran diverifikasi dan berstatus LUNAS oleh admin SAKITA.',
   },
   {
     question: 'Apakah setelah pelatihan saya bisa membuat dan menjual aplikasi sendiri?',
     answer:
-      'Ya. Fokus utama pelatihan SAKITA adalah kemandirian praktik. Anda dibimbing menguasai alur perancangan hingga pembuatan aplikasi berbasis AI sehingga mampu membangun sistem untuk lembaga sendiri maupun menawarkan jasa dan menjual aplikasi digital kepada sekolah, pesantren, UMKM, atau instansi lain sebagai peluang penghasilan baru.',
+      'Ya. Fokus utama pelatihan SAKITA adalah kemandirian praktik. Anda dibimbing menguasai alur perancangan hingga pembuatan aplikasi berbasis AI sehingga mampu membangun sistem untuk lembaga sendiri maupun mengeksplorasi peluang jasa dan produk aplikasi digital.',
   },
   {
     question: 'Bagaimana mengetahui status pembayaran?',
     answer:
       'Simpan tautan status pribadi dan bukti pendaftaran yang diberikan setelah mendaftar. Anda dapat memantau status verifikasi (Menunggu Verifikasi hingga Lunas) melalui halaman status peserta, dan tim admin juga akan menginformasikan setelah verifikasi selesai.',
   },
+  {
+    question: 'Apakah peserta wajib membawa laptop?',
+    answer: '',
+  },
+  {
+    question: 'Apakah peserta harus memiliki akun AI berbayar?',
+    answer: '',
+  },
+  {
+    question: 'Apakah peserta dapat mengikuti pelatihan meskipun belum pernah menggunakan AI?',
+    answer: '',
+  },
+  {
+    question: 'Apakah aplikasi dapat dikembangkan kembali setelah pelatihan?',
+    answer: '',
+  },
+  {
+    question: 'Apakah aplikasi membutuhkan biaya domain, hosting, atau layanan AI?',
+    answer: '',
+  },
+  {
+    question: 'Apakah aplikasi hasil pengembangan peserta dapat dijual?',
+    answer: '',
+  },
+  {
+    question: 'Apakah ada pendampingan setelah pelatihan?',
+    answer: '',
+  },
+  {
+    question: 'Bagaimana ketentuan pembatalan pendaftaran?',
+    answer: '',
+  },
+];
+
+export const ADDITIONAL_ADMIN_FAQ_QUESTIONS: string[] = [
+  'Apakah peserta wajib membawa laptop?',
+  'Apakah peserta harus memiliki akun AI berbayar?',
+  'Apakah peserta dapat mengikuti pelatihan meskipun belum pernah menggunakan AI?',
+  'Apakah aplikasi dapat dikembangkan kembali setelah pelatihan?',
+  'Apakah aplikasi membutuhkan biaya domain, hosting, atau layanan AI?',
+  'Apakah aplikasi hasil pengembangan peserta dapat dijual?',
+  'Apakah ada pendampingan setelah pelatihan?',
+  'Bagaimana ketentuan pembatalan pendaftaran?',
 ];
 
 export const DEFAULT_PROGRAM: Program = {
@@ -198,10 +241,11 @@ export const DEFAULT_WEBSITE_SETTINGS: WebsiteSettings = {
   tagline: 'Belajar AI, Bangun Aplikasi Sendiri, dan Buka Peluang Penghasilan Baru.',
   logoUrl: OFFICIAL_SAKITA_LOGO,
   heroEyebrow: 'INTENSIVE AI BOOTCAMP 2026',
-  heroHeadline: 'Saatnya Sekolah dan Pesantren Anda Naik Kelas.',
-  heroSubheadline: 'Belajar AI, Bangun Aplikasi Sendiri, dan Buka Peluang Penghasilan Baru.',
+  heroHeadline: 'Bangun Aplikasi Sendiri dengan AI.\nTanpa Harus Bisa Coding.',
+  heroSubheadline:
+    'Digitalisasikan sekolah dan pesantren Anda, kuasai keterampilan masa depan, dan buka peluang penghasilan baru.',
   heroDescription:
-    'Tanpa harus bisa coding, Anda dibimbing praktik langsung membangun sistem digital untuk sekolah, pesantren, dan lembaga—mulai dari PPDB, SPP, absensi, rapor, hingga tahfidz. Setelah pelatihan, Anda bukan hanya mandiri membangun aplikasi sendiri, tetapi juga mampu membuat dan menjual aplikasi digital sebagai peluang penghasilan baru.',
+    'Pelatihan praktik intensif 4 hari di Hotel Grand Makmur, Jambi. Anda dibimbing langkah demi langkah membangun 10 proyek aplikasi digital—mulai dari PPDB, SPP, absensi, rapor, hingga sistem tahfidz—agar mampu mendigitalisasi lembaga secara mandiri sekaligus membuka peluang usaha digital di era AI.',
   bannerUrl: '',
   whatsappNumber: OFFICIAL_SAKITA_WHATSAPP,
   contactEmail: '',
@@ -245,7 +289,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   adminWhatsapp: OFFICIAL_SAKITA_WHATSAPP_RAW,
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
-    'Halo {{nama}},\n\nSelamat datang di keluarga besar Sekolah AI Kita (SAKITA).\nNomor Registrasi: {{registrasi}}\nProgram: {{program}}\nStatus Pembayaran: Menunggu Verifikasi\n\nAkses Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nTim kami akan segera memverifikasi bukti pembayaran Anda.',
+    'Halo {{nama}},\n\nTerima kasih telah mendaftar di Sekolah AI Kita (SAKITA).\nNomor Registrasi: {{registrasi}}\nProgram: {{program}}\nStatus Pembayaran: Menunggu Verifikasi\n\nTim admin kami akan segera memverifikasi bukti pembayaran Anda. Setelah status pembayaran Anda terverifikasi LUNAS oleh admin, akses resmi Komunitas Sekolah AI Kita akan otomatis terbuka pada halaman status pendaftaran Anda.',
   adminEmailSubject: 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA',
   adminEmailTemplate:
     'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
@@ -253,7 +297,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
-    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} dengan nomor registrasi {{registrasi}} telah diverifikasi dan berstatus LUNAS.\n\nJadwal: {{tanggal}}\nLokasi: {{lokasi}}\n\nInformasi persiapan pelatihan akan terus kami sampaikan melalui Komunitas Sekolah AI Kita.',
+    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} dengan nomor registrasi {{registrasi}} telah diverifikasi dan berstatus LUNAS.\n\nJadwal: {{tanggal}}\nLokasi: {{lokasi}}\n\nAkses Resmi Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nInformasi persiapan pelatihan akan terus kami sampaikan melalui Komunitas Sekolah AI Kita.',
 };
 
 export const DEFAULT_TRAINER_SECTION_ORDER: TrainerSectionKey[] = [
@@ -354,14 +398,13 @@ export const DEFAULT_PRIMARY_TRAINER: TrainerProfile = {
   backgroundSubtitle: 'Riwayat Aktivitas & Peran Profesional',
   background: [
     'Founder Sekolah AI Kita (SAKITA)',
-    'Praktisi Artificial Intelligence (AI)',
-    'Pengembang Aplikasi Berbasis AI',
+    'Praktisi AI & Pengembang Aplikasi Digital',
     'Pimpinan Pondok Qur’an Para Sahabat',
     'Ketua Yayasan Para Sahabat',
     'Advokat & Konsultan Hukum',
     'Pengajar Al-Qur’an',
     'Penulis & Motivator',
-    'Mahasiswa Program Doktoral (S3) Pendidikan Agama Islam, Universitas Islam Sultan Agung (UNISSULA)',
+    'Mahasiswa Doktoral (S3) Pendidikan Agama Islam — UNISSULA',
   ],
   toolsTitle: 'Powered by Modern AI Technologies',
   toolsDisclaimer:

@@ -455,44 +455,70 @@ export function AdminWebsiteCMS({ settings }: AdminWebsiteCMSProps) {
 
         {tab === 'faq' && (
           <div className="space-y-4">
-            {form.faqs.map((faq, idx) => (
-              <div key={idx} className="rounded-xl border border-slate-200 p-4 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-slate-500">FAQ #{idx + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({ ...form, faqs: form.faqs.filter((_, i) => i !== idx) })
-                    }
-                    className="text-xs text-rose-600 hover:underline"
-                  >
-                    Hapus
-                  </button>
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-xs leading-relaxed text-slate-700">
+              <strong>Pengaturan Tampilan Publik FAQ:</strong> Pertanyaan yang kolom jawabannya masih
+              kosong akan otomatis berstatus <strong>Draft (tersembunyi di landing page)</strong>{' '}
+              hingga Anda mengisi jawaban resmi lalu menekan <strong>Simpan Perubahan</strong>.
+            </div>
+            {form.faqs.map((faq, idx) => {
+              const isPublishedFaq = Boolean(faq.question.trim() && faq.answer.trim());
+              return (
+                <div
+                  key={idx}
+                  className={`rounded-xl border p-4 space-y-2.5 ${
+                    isPublishedFaq ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50/40'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-slate-500">FAQ #{idx + 1}</span>
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                          isPublishedFaq
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {isPublishedFaq
+                          ? 'Tampil di Publik'
+                          : 'Draft · Tersembunyi (Isi jawaban untuk menayangkan)'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({ ...form, faqs: form.faqs.filter((_, i) => i !== idx) })
+                      }
+                      className="text-xs text-rose-600 hover:underline"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={faq.question}
+                    onChange={(e) => {
+                      const next = [...form.faqs];
+                      next[idx] = { ...next[idx], question: e.target.value };
+                      setForm({ ...form, faqs: next });
+                    }}
+                    placeholder="Pertanyaan"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium"
+                  />
+                  <textarea
+                    rows={2}
+                    value={faq.answer}
+                    onChange={(e) => {
+                      const next = [...form.faqs];
+                      next[idx] = { ...next[idx], answer: e.target.value };
+                      setForm({ ...form, faqs: next });
+                    }}
+                    placeholder="Tulis jawaban resmi SAKITA di sini agar pertanyaan ini tampil di landing page..."
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  />
                 </div>
-                <input
-                  type="text"
-                  value={faq.question}
-                  onChange={(e) => {
-                    const next = [...form.faqs];
-                    next[idx] = { ...next[idx], question: e.target.value };
-                    setForm({ ...form, faqs: next });
-                  }}
-                  placeholder="Pertanyaan"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
-                />
-                <textarea
-                  rows={2}
-                  value={faq.answer}
-                  onChange={(e) => {
-                    const next = [...form.faqs];
-                    next[idx] = { ...next[idx], answer: e.target.value };
-                    setForm({ ...form, faqs: next });
-                  }}
-                  placeholder="Jawaban"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-            ))}
+              );
+            })}
             <button
               type="button"
               onClick={() =>

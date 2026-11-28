@@ -39,7 +39,11 @@ import {
   submitPaymentProofTransaction,
   uploadProofFileWithProgress,
 } from '../lib/sakitaService';
-import { trackMetaLead } from '../lib/metaPixel';
+import {
+  trackMetaCompleteRegistration,
+  trackMetaInitiateCheckout,
+  trackMetaLead,
+} from '../lib/metaPixel';
 import type { BankSettings, Program, RegistrationTicket, WebsiteSettings } from '../types';
 
 interface RegisterPageProps {
@@ -139,6 +143,13 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         if (preferred) {
           setSelectedProgramId(preferred.id);
           setTransferAmount(String(preferred.price));
+          if (!resumeToken) {
+            trackMetaInitiateCheckout({
+              programId: preferred.id,
+              programName: preferred.name,
+              price: preferred.price,
+            });
+          }
         }
 
         // If resuming with secure accessToken (e.g., re-upload proof or continue payment)
@@ -231,8 +242,8 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         joinWaitlistIfFull: isFull,
       });
 
-      // Fire Meta Pixel Lead strictly AFTER registration data is saved & privacy agreed (deduplicated)
-      trackMetaLead({
+      // Fire Meta Pixel Lead & CompleteRegistration strictly AFTER registration data is saved & privacy agreed (deduplicated, zero PII)
+      const regEventPayload = {
         registrationId: registration.id,
         registrationNumber: registration.registrationNumber,
         programId: registration.programId,
@@ -240,7 +251,9 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         amount: registration.amount,
         isWaitlist,
         privacyAccepted: agreePrivacy,
-      });
+      };
+      trackMetaLead(regEventPayload);
+      trackMetaCompleteRegistration(regEventPayload);
 
       setCreatedTicket(ticket);
       setCreatedEmail(registration.email);
@@ -362,7 +375,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
       toast(
         'success',
         'Bukti Pembayaran Terkirim',
-        'Status pendaftaran Anda kini Menunggu Verifikasi. Akses komunitas telah terbuka.',
+        'Status pendaftaran Anda kini Menunggu Verifikasi. Akses komunitas akan otomatis terbuka setelah pembayaran diverifikasi LUNAS oleh admin.',
       );
       navigate(`/sukses/${encodeURIComponent(createdTicket.accessToken)}`);
     } catch (err) {

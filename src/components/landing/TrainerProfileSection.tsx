@@ -8,6 +8,7 @@ import {
   Briefcase,
   Calendar,
   Check,
+  ChevronDown,
   Clapperboard,
   Clock,
   Compass,
@@ -24,7 +25,11 @@ import {
 } from 'lucide-react';
 import { ResolvedAssetImage } from '../ResolvedAssetImage';
 import { getToolBrandVisual, ToolBrandLogo } from './ToolBrandLogo';
-import { DEFAULT_TRAINER_SECTION_ORDER, DEFAULT_TRAINER_SECTION_VISIBILITY } from '../../lib/defaults';
+import {
+  DEFAULT_PRIMARY_TRAINER,
+  DEFAULT_TRAINER_SECTION_ORDER,
+  DEFAULT_TRAINER_SECTION_VISIBILITY,
+} from '../../lib/defaults';
 import { isSafeHttpUrl } from '../../lib/sakitaService';
 import type { Program, TrainerProfile, TrainerSectionKey } from '../../types';
 
@@ -51,6 +56,22 @@ const EXPERTISE_ICON_MAP: Record<string, React.ComponentType<{ className?: strin
   FolderKanban,
 };
 
+const SUMMARY_BIO_FALLBACK: string[] = [
+  'Seorang praktisi pendidikan, pimpinan pesantren, advokat, penulis, dan motivator yang mendalami Artificial Intelligence (AI) serta penerapannya dalam pengembangan aplikasi digital, transformasi pendidikan, dan inovasi bisnis.',
+  'Berangkat dari pengalaman langsung dalam mengelola lembaga pendidikan, ia mengembangkan kompetensinya di bidang AI untuk menghadirkan solusi digital yang praktis serta membantu masyarakat membangun aplikasi secara mandiri dan membuka peluang usaha berbasis teknologi.',
+];
+
+const CONCISE_ACTIVITIES_FALLBACK: string[] = [
+  'Founder Sekolah AI Kita (SAKITA)',
+  'Praktisi AI & Pengembang Aplikasi Digital',
+  'Pimpinan Pondok Qur’an Para Sahabat',
+  'Ketua Yayasan Para Sahabat',
+  'Advokat & Konsultan Hukum',
+  'Pengajar Al-Qur’an',
+  'Penulis & Motivator',
+  'Mahasiswa Doktoral (S3) Pendidikan Agama Islam — UNISSULA',
+];
+
 function getInitials(name: string): string {
   const clean = name
     .replace(/,.*$/, '')
@@ -70,6 +91,7 @@ export function TrainerProfileSection({
   previewMode = false,
 }: TrainerProfileSectionProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [expandedDetails, setExpandedDetails] = useState(previewMode);
 
   if (!trainers || trainers.length === 0) return null;
 
@@ -89,6 +111,44 @@ export function TrainerProfileSection({
     .map((p) => p.trim())
     .filter(Boolean);
 
+  const isDefaultPrimaryBio =
+    trainer.id === DEFAULT_PRIMARY_TRAINER.id &&
+    (!trainer.bio || trainer.bio.trim() === DEFAULT_PRIMARY_TRAINER.bio.trim());
+
+  const summaryParagraphs = isDefaultPrimaryBio
+    ? SUMMARY_BIO_FALLBACK
+    : bioParagraphs.slice(0, 2).length > 0
+      ? bioParagraphs.slice(0, 2)
+      : SUMMARY_BIO_FALLBACK;
+
+  const extraBioParagraphs = isDefaultPrimaryBio
+    ? bioParagraphs
+    : bioParagraphs.slice(2);
+
+  const summaryActivities =
+    trainer.id === DEFAULT_PRIMARY_TRAINER.id &&
+    trainer.background &&
+    trainer.background.length >= 8
+      ? CONCISE_ACTIVITIES_FALLBACK
+      : trainer.background && trainer.background.length > 0
+        ? trainer.background.slice(0, 8)
+        : CONCISE_ACTIVITIES_FALLBACK;
+
+  const collapsibleKeys = new Set<TrainerSectionKey>([
+    'expertise',
+    'background',
+    'whyLearn',
+    'statement',
+  ]);
+
+  const hasExpandableContent =
+    extraBioParagraphs.length > 0 ||
+    (visibility.expertise && trainer.expertise && trainer.expertise.length > 0) ||
+    (visibility.whyLearn &&
+      ((trainer.whyLearnPoints && trainer.whyLearnPoints.length > 0) ||
+        Boolean(trainer.whyLearnNarrative))) ||
+    (visibility.statement && Boolean(trainer.personalStatement));
+
   const renderSubsection = (key: TrainerSectionKey) => {
     if (!visibility[key]) return null;
 
@@ -99,12 +159,11 @@ export function TrainerProfileSection({
           <motion.div
             key="expertise"
             initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.12 }}
-            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-16 lg:pt-20"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="pt-14 lg:pt-16"
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between border-b border-white/10 pb-6">
+            <div className="flex flex-col gap-2 border-b border-white/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="font-mono text-xs font-medium tracking-[0.18em] text-[#D4AF37]">
                   {trainer.expertiseTitle || 'Areas of Expertise'}
@@ -154,12 +213,11 @@ export function TrainerProfileSection({
           <motion.div
             key="background"
             initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.12 }}
-            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-16 lg:pt-20"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="pt-14 lg:pt-16"
           >
-            <div className="rounded-3xl border border-white/10 bg-[#0A1935]/75 p-7 backdrop-blur-md sm:p-10">
+            <div className="rounded-3xl border border-white/10 bg-[#0A1935]/75 p-6 backdrop-blur-md sm:p-10">
               <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
                 <div className="lg:col-span-4">
                   <p className="font-mono text-xs font-medium tracking-[0.18em] text-[#D4AF37]">
@@ -176,12 +234,9 @@ export function TrainerProfileSection({
                 </div>
 
                 <div className="lg:col-span-8">
-                  <ol className="relative space-y-3.5 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-gradient-to-b before:from-[#D4AF37]/60 before:via-[#2563EB]/40 before:to-transparent">
+                  <ol className="relative space-y-3 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-gradient-to-b before:from-[#D4AF37]/60 before:via-[#2563EB]/40 before:to-transparent">
                     {trainer.background.map((role, idx) => (
-                      <li
-                        key={`${role}-${idx}`}
-                        className="relative flex items-start gap-4 pl-10"
-                      >
+                      <li key={`${role}-${idx}`} className="relative flex items-start gap-4 pl-10">
                         <span
                           aria-hidden="true"
                           className="absolute left-0 top-1.5 flex h-8 w-8 items-center justify-center rounded-full border border-[#D4AF37]/40 bg-[#07152D] font-mono text-[11px] font-semibold text-[#D4AF37] tabular-nums"
@@ -210,7 +265,7 @@ export function TrainerProfileSection({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.15 }}
             transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-16 lg:pt-20"
+            className="pt-14 lg:pt-16"
           >
             <div className="text-center">
               <p className="font-mono text-xs font-medium tracking-[0.18em] text-[#D4AF37]">
@@ -263,7 +318,7 @@ export function TrainerProfileSection({
           return (
             <div
               key="portfolio-preview-empty"
-              className="mt-16 rounded-2xl border border-dashed border-[#D4AF37]/35 bg-[#0B1C3A]/40 p-6 text-center text-xs text-slate-300"
+              className="mt-14 rounded-2xl border border-dashed border-[#D4AF37]/35 bg-[#0B1C3A]/40 p-6 text-center text-xs text-slate-300"
             >
               Section <strong>Portofolio Karya</strong> saat ini otomatis disembunyikan di halaman
               publik karena belum ada aplikasi yang ditambahkan oleh admin.
@@ -278,7 +333,7 @@ export function TrainerProfileSection({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.12 }}
             transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-16 lg:pt-20"
+            className="pt-14 lg:pt-16"
           >
             <div className="max-w-2xl">
               <p className="font-mono text-xs font-medium tracking-[0.18em] text-[#D4AF37]">
@@ -377,12 +432,11 @@ export function TrainerProfileSection({
           <motion.div
             key="whyLearn"
             initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-16 lg:pt-20"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="pt-14 lg:pt-16"
           >
-            <div className="grid grid-cols-1 gap-8 rounded-3xl border border-white/10 bg-gradient-to-br from-[#0D2144]/85 via-[#091834]/90 to-[#07152D] p-7 backdrop-blur-md sm:p-10 lg:grid-cols-12 lg:items-center">
+            <div className="grid grid-cols-1 gap-8 rounded-3xl border border-white/10 bg-gradient-to-br from-[#0D2144]/85 via-[#091834]/90 to-[#07152D] p-6 backdrop-blur-md sm:p-10 lg:grid-cols-12 lg:items-center">
               <div className="lg:col-span-5">
                 <p className="font-mono text-xs font-medium tracking-[0.18em] text-[#D4AF37]">
                   Mengapa Belajar Bersama Pemateri Ini?
@@ -423,12 +477,11 @@ export function TrainerProfileSection({
           <motion.div
             key="statement"
             initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-16 lg:pt-20"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="pt-14 lg:pt-16"
           >
-            <figure className="relative overflow-hidden rounded-3xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#0F2650]/80 via-[#0A1A38]/90 to-[#07152D] px-7 py-10 text-center backdrop-blur-md sm:px-14 sm:py-12">
+            <figure className="relative overflow-hidden rounded-3xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#0F2650]/80 via-[#0A1A38]/90 to-[#07152D] px-6 py-10 text-center backdrop-blur-md sm:px-14 sm:py-12">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute -top-20 left-1/2 h-40 w-80 -translate-x-1/2 rounded-full bg-[#2563EB]/20 blur-3xl"
@@ -462,9 +515,9 @@ export function TrainerProfileSection({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-14 lg:pt-16 text-center"
+            className="pt-14 text-center lg:pt-16"
           >
-            <div className="mx-auto max-w-4xl border-y border-white/10 py-10">
+            <div className="mx-auto max-w-4xl border-y border-white/10 py-9">
               <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5 sm:gap-y-2">
                 {trainer.sloganLines.map((line, idx) => (
                   <span
@@ -499,7 +552,7 @@ export function TrainerProfileSection({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.15 }}
             transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pt-14 lg:pt-16"
+            className="pt-12 lg:pt-14"
           >
             <div className="relative overflow-hidden rounded-3xl border border-[#2563EB]/45 bg-gradient-to-br from-[#1246A0]/35 via-[#0B1F42]/95 to-[#07152D] p-7 text-center sm:p-11">
               <div
@@ -559,7 +612,7 @@ export function TrainerProfileSection({
                   <span className="text-white/20" aria-hidden="true">·</span>
                   <span className="inline-flex items-center gap-1.5 tabular-nums">
                     <Users className="h-3.5 w-3.5 text-[#D4AF37]" />
-                    <span>Kuota Terbatas {activeProgram.quota} Peserta</span>
+                    <span>Maksimal {activeProgram.quota} Peserta</span>
                   </span>
                 </div>
               </div>
@@ -572,6 +625,9 @@ export function TrainerProfileSection({
         return null;
     }
   };
+
+  const expandedOrder = order.filter((k) => collapsibleKeys.has(k));
+  const alwaysVisibleOrder = order.filter((k) => !collapsibleKeys.has(k));
 
   return (
     <section
@@ -606,7 +662,10 @@ export function TrainerProfileSection({
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setSelectedIndex(idx)}
+                  onClick={() => {
+                    setSelectedIndex(idx);
+                    setExpandedDetails(previewMode);
+                  }}
                   className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
                     idx === safeIndex
                       ? 'bg-[#1246A0] text-white ring-1 ring-[#D4AF37]/40'
@@ -640,28 +699,29 @@ export function TrainerProfileSection({
             </h2>
           </div>
           {trainer.roleBadge && (
-            <span className="inline-flex w-fit items-center border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.2em] text-[#D4AF37] rounded-md">
+            <span className="inline-flex w-fit items-center rounded-md border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.2em] text-[#D4AF37]">
               {trainer.roleBadge}
             </span>
           )}
         </motion.div>
 
-        {/* Primary Split Card: Portrait (Left Desktop / Top Mobile) + Identity & Profile (Right Desktop / Bottom Mobile) */}
+        {/* Primary Split Card: Portrait (Left Desktop / Top Mobile) + Prominent Trainer Identity & Concise Profile (Right Desktop / Bottom Mobile) */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.1 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="rounded-3xl border border-white/12 bg-gradient-to-b from-[#0C1E3E]/85 to-[#081630]/95 p-6 shadow-[0_24px_70px_-24px_rgba(3,10,25,0.85)] backdrop-blur-md sm:p-8 lg:p-10"
+          className="rounded-3xl border border-white/12 bg-gradient-to-b from-[#0C1E3E]/85 to-[#081630]/95 p-5 shadow-[0_24px_70px_-24px_rgba(3,10,25,0.85)] backdrop-blur-md sm:p-8 lg:p-10"
         >
-          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-12">
-            {/* Portrait Column */}
-            <div className="lg:col-span-5">
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-11">
+            {/* Portrait Column — Preserves exact untouched trainer photo */}
+            <div className="mx-auto w-full max-w-[340px] sm:max-w-[380px] lg:col-span-5 lg:max-w-none">
               <div className="relative overflow-hidden rounded-2xl border border-[#D4AF37]/35 bg-gradient-to-b from-[#1246A0]/30 via-[#0A1B38] to-[#07152D] p-2">
                 <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-[#07152D]">
                   <ResolvedAssetImage
                     src={trainer.photoUrl}
                     alt={`${trainer.fullName} — ${trainer.titlePrimary}`}
+                    loading="lazy"
                     className="h-full w-full object-cover object-top"
                     fallback={
                       <div className="relative flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-[#1246A0]/45 via-[#0A1C3C] to-[#07152D] px-6 text-center">
@@ -674,70 +734,144 @@ export function TrainerProfileSection({
                         <p className="mt-1 text-xs font-medium text-[#D4AF37]">
                           {trainer.titlePrimary}
                         </p>
-                        <p className="mt-4 max-w-[230px] text-[11px] leading-relaxed text-slate-400">
-                          Foto resmi pemateri dapat diunggah langsung melalui Dashboard Admin → Manajemen Pemateri.
-                        </p>
                       </div>
                     }
                   />
-                  {/* Subtle bottom gradient for seamless dark-navy integration */}
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#07152D]/80 via-[#07152D]/20 to-transparent"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#07152D]/70 via-[#07152D]/15 to-transparent"
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Clean Identity Summary Footer Under Portrait */}
-              <div className="mt-5 rounded-2xl border border-white/10 bg-[#07152D]/75 px-5 py-4">
-                <p className="font-display text-base font-bold tracking-tight text-white sm:text-lg">
+            {/* Editorial Identity & Profile Column — Trainer Name as Dominant Primary Identity */}
+            <div className="flex flex-col justify-center lg:col-span-7">
+              <div className="border-b border-white/10 pb-6">
+                <h3
+                  className="font-display font-bold tracking-tight text-white"
+                  style={{ fontSize: 'clamp(1.65rem, 3vw, 2.55rem)', lineHeight: 1.14 }}
+                >
                   {trainer.fullName}
-                </p>
+                </h3>
+
                 {trainer.titlePrimary && (
-                  <p className="mt-1 text-xs font-semibold text-[#93C5FD]">
+                  <p className="mt-2.5 font-display text-base font-semibold text-[#22D3EE] sm:text-lg">
                     {trainer.titlePrimary}
                   </p>
                 )}
-                {trainer.titleSecondary && (
-                  <p className="mt-0.5 text-xs text-slate-300">
-                    {trainer.titleSecondary}
-                  </p>
-                )}
-                {trainer.pillarsLabel && (
-                  <p className="mt-3 border-t border-white/10 pt-3 font-mono text-[11px] tracking-[0.12em] text-[#D4AF37]">
-                    {trainer.pillarsLabel}
-                  </p>
-                )}
-              </div>
-            </div>
 
-            {/* Editorial Profile Column */}
-            <div className="flex flex-col justify-center lg:col-span-7">
-              <div className="border-b border-white/10 pb-6">
-                <p className="font-mono text-xs font-medium tracking-[0.14em] text-[#93C5FD]">
-                  {trainer.fullName}
-                </p>
-                <h3 className="mt-3 font-display text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl lg:text-[2.15rem] [text-wrap:balance]">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-200">
+                  {trainer.titleSecondary && (
+                    <span className="font-medium">{trainer.titleSecondary}</span>
+                  )}
+                  {trainer.titleSecondary && trainer.pillarsLabel && (
+                    <span className="hidden text-white/25 sm:inline" aria-hidden="true">
+                      |
+                    </span>
+                  )}
+                  {trainer.pillarsLabel && (
+                    <span className="font-mono text-xs tracking-[0.14em] text-[#D4AF37]">
+                      {trainer.pillarsLabel}
+                    </span>
+                  )}
+                </div>
+
+                {/* Personal Branding Headline */}
+                <p className="mt-5 border-l-2 border-[#D4AF37] pl-4 font-display text-lg font-bold leading-snug tracking-tight text-white sm:text-xl">
                   {trainer.headline || 'Dari Dunia Pendidikan Menuju Inovasi Digital.'}
-                </h3>
-                {trainer.subheadline && (
-                  <p className="mt-4 text-base font-medium leading-relaxed text-slate-200/95">
-                    {trainer.subheadline}
-                  </p>
-                )}
+                </p>
               </div>
 
-              <div className="mt-6 space-y-4 text-sm leading-[1.8] text-slate-300 sm:text-[15px]">
-                {bioParagraphs.map((paragraph, idx) => (
+              {/* Concise 2-Paragraph Summary Profile */}
+              <div className="mt-5 space-y-3.5 text-sm leading-[1.8] text-slate-300 sm:text-[15px]">
+                {summaryParagraphs.map((paragraph, idx) => (
                   <p key={idx}>{paragraph}</p>
                 ))}
               </div>
+
+              {/* Concise Professional Activities Grid */}
+              <div className="mt-6 rounded-2xl border border-white/10 bg-[#07152D]/70 p-4 sm:p-5">
+                <p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-[#D4AF37] uppercase">
+                  Aktivitas & Peran Profesional
+                </p>
+                <ul className="mt-3.5 grid grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
+                  {summaryActivities.map((activity, idx) => (
+                    <li
+                      key={`${activity}-${idx}`}
+                      className="flex items-start gap-2.5 text-xs leading-relaxed text-slate-200 sm:text-[13px]"
+                    >
+                      <span className="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-md bg-[#22D3EE]/12 text-[#22D3EE]">
+                        <Check className="h-3 w-3" />
+                      </span>
+                      <span>{activity}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Expand/Collapse Full Biodata & Competencies Button */}
+              {hasExpandableContent && (
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDetails((v) => !v)}
+                    aria-expanded={expandedDetails}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#D4AF37]/45 bg-[#D4AF37]/10 px-5 text-xs font-semibold tracking-wide text-[#F8FAFC] transition-colors hover:border-[#D4AF37] hover:bg-[#D4AF37]/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]"
+                  >
+                    <span>
+                      {expandedDetails
+                        ? 'Tutup Profil Lengkap'
+                        : 'Baca Profil Selengkapnya'}
+                    </span>
+                    <ChevronDown
+                      className={`h-4 w-4 text-[#D4AF37] transition-transform duration-200 ${
+                        expandedDetails ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                  <span className="text-xs text-slate-400">
+                    {expandedDetails
+                      ? 'Menampilkan biodata lengkap, bidang keahlian, dan pernyataan pemateri.'
+                      : 'Lihat biodata lengkap & 8 bidang keahlian pemateri'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
 
-        {/* Dynamically Ordered & Visibility-Controlled Subsections */}
-        {order.map((key) => renderSubsection(key))}
+        {/* Expandable Detailed Biodata, Expertise, Background, Why Learn & Statement */}
+        {expandedDetails && (
+          <div className="mt-8 space-y-2">
+            {extraBioParagraphs.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="rounded-2xl border border-white/10 bg-[#0A1935]/75 p-6 sm:p-8"
+              >
+                <p className="font-mono text-xs font-medium tracking-[0.18em] text-[#D4AF37]">
+                  Profil Lengkap Pemateri
+                </p>
+                {trainer.subheadline && (
+                  <p className="mt-3 font-display text-base font-semibold leading-relaxed text-white sm:text-lg">
+                    {trainer.subheadline}
+                  </p>
+                )}
+                <div className="mt-4 space-y-3.5 text-sm leading-[1.8] text-slate-300 sm:text-[15px]">
+                  {extraBioParagraphs.map((paragraph, idx) => (
+                    <p key={idx}>{paragraph}</p>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+            {expandedOrder.map((key) => renderSubsection(key))}
+          </div>
+        )}
+
+        {/* Always-Visible Core Subsections (Tools with Official Brand Logos, Portfolio if configured, Slogan & CTA) */}
+        {alwaysVisibleOrder.map((key) => renderSubsection(key))}
       </div>
     </section>
   );

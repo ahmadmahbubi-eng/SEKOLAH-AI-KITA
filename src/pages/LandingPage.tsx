@@ -4,22 +4,30 @@ import {
   ArrowRight,
   BookMarked,
   BookOpen,
+  Briefcase,
   Building2,
   Calendar,
   CalendarCheck,
   Check,
   ChevronDown,
   ClipboardCheck,
+  ClipboardList,
   Clock,
   Copy,
+  FileCheck2,
   Globe,
   GraduationCap,
   ImageIcon,
+  Landmark,
   LayoutDashboard,
   MapPin,
   Menu,
   MessageCircle,
+  Rocket,
+  School,
   ShieldCheck,
+  Sparkles,
+  Store,
   UserCheck,
   UserPlus,
   Users,
@@ -36,6 +44,7 @@ import { TrainerProfileSection } from '../components/landing/TrainerProfileSecti
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_PRIMARY_TRAINER, DEFAULT_PROGRAM, DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
 import { computeRemainingSeats, formatRupiah, toWhatsappLink } from '../lib/format';
+import { trackMetaContact, trackMetaViewContent } from '../lib/metaPixel';
 import { fetchPublicPrograms, fetchPublicTrainers, fetchWebsiteSettings } from '../lib/sakitaService';
 import type { Program, TrainerProfile, WebsiteSettings } from '../types';
 
@@ -85,12 +94,57 @@ const PROBLEMS = [
 ];
 
 const TARGET_AUDIENCE = [
-  { role: 'Kepala Sekolah', desc: 'Merancang modernisasi layanan akademik dan tata kelola unit sekolah.' },
-  { role: 'Pimpinan Pesantren', desc: 'Mengintegrasikan administrasi santri, tahfidz, asrama, dan kepengasuhan.' },
-  { role: 'Ketua Yayasan', desc: 'Memantau keuangan, pertumbuhan unit, dan efisiensi anggaran teknologi.' },
-  { role: 'Pengelola Lembaga Pendidikan', desc: 'Membangun kemandirian sistem digital yang relevan dengan kebutuhan internal.' },
-  { role: 'Guru dan Ustadz/Ustadzah', desc: 'Mempermudah pencatatan nilai, ujian digital, absensi, dan setoran hafalan.' },
-  { role: 'Operator dan Tenaga Administrasi', desc: 'Mengotomatisasi alur PPDB, pencatatan SPP, dan pelaporan operasional.' },
+  {
+    role: 'Kepala Sekolah',
+    icon: School,
+    desc: 'Merancang modernisasi layanan akademik, tata kelola, dan dashboard pemantauan unit sekolah.',
+  },
+  {
+    role: 'Pimpinan Pondok Pesantren',
+    icon: Landmark,
+    desc: 'Mengintegrasikan administrasi santri, tahfidz, asrama, layanan makan, dan kepengasuhan secara tertib.',
+  },
+  {
+    role: 'Guru & Tenaga Pendidik',
+    icon: GraduationCap,
+    desc: 'Mempermudah pencatatan nilai, rapor, ujian digital, absensi, dan pendampingan belajar siswa.',
+  },
+  {
+    role: 'Operator & Staf Administrasi',
+    icon: ClipboardList,
+    desc: 'Mengotomatisasi alur PPDB, pencatatan keuangan SPP, dan rekap pelaporan operasional harian.',
+  },
+  {
+    role: 'Pengelola Yayasan Pendidikan',
+    icon: Building2,
+    desc: 'Menghadirkan kemandirian teknologi lintas unit pendidikan secara lebih efisien dan terukur.',
+  },
+  {
+    role: 'Pengusaha & Pelaku UMKM',
+    icon: Store,
+    desc: 'Membangun aplikasi pendukung operasional usaha, pencatatan, dan layanan pelanggan dengan bantuan AI.',
+  },
+  {
+    role: 'Calon Pengusaha Digital',
+    icon: Rocket,
+    desc: 'Mempelajari alur perancangan aplikasi dan wawasan pengembangan jasa maupun produk digital.',
+  },
+  {
+    role: 'Pemula yang Ingin Menguasai AI',
+    icon: Sparkles,
+    desc: 'Belajar secara terstruktur dari dasar praktik tanpa perlu memiliki latar belakang IT atau coding.',
+  },
+];
+
+const PARTICIPANT_DELIVERABLES: string[] = [
+  'Keterampilan membangun aplikasi dengan bantuan AI.',
+  'Pengalaman praktik langsung 10 proyek aplikasi digital.',
+  'File proyek hasil praktik pelatihan.',
+  'Pemahaman cara mempublikasikan aplikasi secara online.',
+  'Kemampuan mengembangkan aplikasi sesuai kebutuhan lembaga.',
+  'Wawasan membangun bisnis jasa pembuatan aplikasi.',
+  'Wawasan memasarkan aplikasi sebagai produk digital.',
+  'Akses Komunitas Sekolah AI Kita.',
 ];
 
 export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) {
@@ -182,11 +236,39 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
         : DEFAULT_WEBSITE_SETTINGS.projects;
   const targetAudience =
     activeProgram.targetAudience && activeProgram.targetAudience.length > 0
-      ? activeProgram.targetAudience
+      ? activeProgram.targetAudience.map((item, idx) => ({
+          ...item,
+          icon: TARGET_AUDIENCE[idx % TARGET_AUDIENCE.length].icon,
+        }))
       : TARGET_AUDIENCE;
   const facilities = activeProgram.facilities?.length ? activeProgram.facilities : settings.facilities;
-  const faqs = settings.faqs?.length ? settings.faqs : DEFAULT_WEBSITE_SETTINGS.faqs;
+  const rawFaqs = settings.faqs?.length ? settings.faqs : DEFAULT_WEBSITE_SETTINGS.faqs;
+  // Hide unanswered admin draft FAQs on public landing page until admin fills their answers
+  const faqs = rawFaqs.filter(
+    (item) => item.question.trim().length > 0 && item.answer.trim().length > 0,
+  );
   const moduleCount = projects.length || activeProgram.projectCount;
+
+  const heroHeadlineLines = heroHeadline
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  // Fire Meta Pixel ViewContent once per session per viewed program (non-PII)
+  useEffect(() => {
+    trackMetaViewContent({
+      programId: activeProgram.id,
+      programName: activeProgram.name,
+      price: activeProgram.price,
+    });
+  }, [activeProgram.id, activeProgram.name, activeProgram.price]);
+
+  const handleTrackWhatsappClick = (source: string) => {
+    trackMetaContact({
+      source,
+      programName: activeProgram.name,
+    });
+  };
 
   const showMentorSection = Boolean(
     settings.mentor && settings.mentor.enabled && settings.mentor.name.trim().length > 0,
@@ -219,7 +301,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
   };
 
   return (
-    <div id="beranda" className="min-h-screen bg-[#080F1D] text-[#F8FAFC]">
+    <div id="beranda" className="min-h-screen overflow-x-hidden bg-[#080F1D] text-[#F8FAFC]">
       {/* =====================================================================
           TOP NAVIGATION (Strict 3-Zone Contract, Sticky, Responsive)
          ===================================================================== */}
@@ -323,16 +405,25 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
 
                 <h1
                   className="mt-4 font-display font-bold tracking-tight text-[#F8FAFC] [text-wrap:balance]"
-                  style={{ fontSize: 'clamp(2.2rem, 3.8vw, 3.5rem)', lineHeight: 1.1 }}
+                  style={{ fontSize: 'clamp(2.15rem, 3.9vw, 3.55rem)', lineHeight: 1.09 }}
                 >
-                  {heroHeadline}
+                  {heroHeadlineLines.length >= 2 ? (
+                    <>
+                      <span className="block">{heroHeadlineLines[0]}</span>
+                      <span className="mt-1.5 block text-[#22D3EE]">
+                        {heroHeadlineLines.slice(1).join(' ')}
+                      </span>
+                    </>
+                  ) : (
+                    heroHeadline
+                  )}
                 </h1>
 
-                <p className="mt-5 font-display text-lg font-medium text-[#22D3EE] sm:text-xl [text-wrap:balance]">
-                  {heroSubheadline}
+                <p className="mt-5 font-display text-lg font-medium leading-relaxed text-[#E2E8F0] sm:text-xl [text-wrap:balance]">
+                  “{heroSubheadline}”
                 </p>
 
-                <p className="mt-5 max-w-xl text-base leading-relaxed text-[#94A3B8]">
+                <p className="mt-4 max-w-xl text-sm leading-relaxed text-[#94A3B8] sm:text-base">
                   {heroDescription}
                 </p>
 
@@ -358,16 +449,6 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                   >
                     {programs.length > 1 ? `Lihat ${programs.length} Program Pelatihan` : 'Lihat Program Pelatihan'}
                   </a>
-                </div>
-
-                <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#94A3B8]">
-                  <span>{activeProgram.dateLabel}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{activeProgram.location}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-[#F8FAFC] font-medium">
-                    {settings.brandSubtitle || 'SEKOLAH AI KITA'}
-                  </span>
                 </div>
               </motion.div>
 
@@ -398,25 +479,52 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
               </motion.div>
             </div>
 
-            {/* Three Key Statistics Strip (Full-Width Row Below Split, 100% Dynamic per Program) */}
-            <div className="mt-14 grid grid-cols-1 divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-[#0F172A]/90 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <div className="p-6 sm:p-7">
-                <p className="font-mono text-xl font-bold text-[#F8FAFC] tabular-nums sm:text-2xl">
-                  {activeProgram.durationLabel}
-                </p>
-                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Durasi & Format Praktik</p>
+            {/* Five Core Program Highlights Strip (Consistent Key Training Facts) */}
+            <div className="mt-12 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0F172A]/90 p-4">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
+                <div>
+                  <p className="text-[11px] font-medium text-[#94A3B8]">Durasi Program</p>
+                  <p className="mt-0.5 font-display text-sm font-bold text-[#F8FAFC]">
+                    {activeProgram.durationLabel}
+                  </p>
+                </div>
               </div>
-              <div className="p-6 sm:p-7">
-                <p className="font-mono text-2xl font-bold text-[#22D3EE] tabular-nums sm:text-3xl">
-                  {moduleCount} MATERI
-                </p>
-                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Kurikulum & Proyek Praktik</p>
+              <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0F172A]/90 p-4">
+                <LayoutDashboard className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
+                <div>
+                  <p className="text-[11px] font-medium text-[#94A3B8]">Kurikulum Praktik</p>
+                  <p className="mt-0.5 font-display text-sm font-bold text-[#22D3EE] tabular-nums">
+                    {moduleCount} Proyek Aplikasi
+                  </p>
+                </div>
               </div>
-              <div className="p-6 sm:p-7">
-                <p className="font-mono text-2xl font-bold text-[#F8FAFC] tabular-nums sm:text-3xl">
-                  {activeProgram.quota} PESERTA
-                </p>
-                <p className="mt-1 text-sm font-medium text-[#94A3B8]">Kuota Kelas Eksklusif</p>
+              <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0F172A]/90 p-4">
+                <Users className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
+                <div>
+                  <p className="text-[11px] font-medium text-[#94A3B8]">Kuota Eksklusif</p>
+                  <p className="mt-0.5 font-display text-sm font-bold text-[#F8FAFC] tabular-nums">
+                    Maksimal {activeProgram.quota} Peserta
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0F172A]/90 p-4">
+                <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
+                <div>
+                  <p className="text-[11px] font-medium text-[#94A3B8]">Tanggal Pelaksanaan</p>
+                  <p className="mt-0.5 font-display text-sm font-bold text-[#F8FAFC]">
+                    {activeProgram.dateLabel}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0F172A]/90 p-4 sm:col-span-2 lg:col-span-1">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
+                <div>
+                  <p className="text-[11px] font-medium text-[#94A3B8]">Lokasi Tatap Muka</p>
+                  <p className="mt-0.5 font-display text-sm font-bold text-[#F8FAFC]">
+                    {activeProgram.location}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -770,37 +878,123 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
         </section>
 
         {/* ===================================================================
-            E. TARGET PESERTA
+            E. TARGET PESERTA PELATIHAN
            =================================================================== */}
         <section className="border-b border-slate-800/80 bg-[#0F172A]/35 py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-              <div className="max-w-2xl">
-                <p className="text-xs font-medium tracking-wide text-[#22D3EE]">Target Peserta</p>
-                <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl">
-                  Dirancang untuk Pengambil Keputusan & Penggerak Lembaga
-                </h2>
-              </div>
-              <div className="rounded-xl border border-[#22D3EE]/25 bg-[#080F1D] px-5 py-3.5 text-sm font-medium text-[#F8FAFC]">
-                Tidak harus memiliki latar belakang IT atau pengalaman coding.
-              </div>
+            <div className="max-w-3xl">
+              <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
+                Target Peserta Pelatihan
+              </p>
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
+                Siapa yang Cocok Mengikuti Pelatihan Ini?
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-[#94A3B8]">
+                “Tidak perlu memiliki latar belakang IT atau pengalaman coding. Pelatihan ini dirancang
+                untuk membimbing Anda secara bertahap dalam memanfaatkan AI untuk menciptakan solusi
+                digital.”
+              </p>
             </div>
 
-            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {targetAudience.map((item) => (
-                <div
-                  key={item.role}
-                  className="rounded-xl border border-slate-800 bg-[#0F172A]/80 p-6"
-                >
-                  <div className="flex items-center gap-3">
-                    <GraduationCap className="h-5 w-5 text-[#22D3EE] shrink-0" />
-                    <h3 className="font-display text-base font-semibold text-[#F8FAFC]">
+            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {targetAudience.map((item) => {
+                const AudienceIcon = item.icon || GraduationCap;
+                return (
+                  <div
+                    key={item.role}
+                    className="group rounded-xl border border-slate-800 bg-[#0F172A]/85 p-5 transition-colors hover:border-[#22D3EE]/40"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700/80 bg-[#080F1D] text-[#22D3EE]">
+                      <AudienceIcon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-4 font-display text-base font-semibold text-[#F8FAFC]">
                       {item.role}
                     </h3>
+                    <p className="mt-2 text-xs leading-relaxed text-[#94A3B8] sm:text-sm">
+                      {item.desc}
+                    </p>
                   </div>
-                  <p className="mt-2.5 text-sm leading-relaxed text-[#94A3B8]">{item.desc}</p>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================================
+            E2. HASIL YANG DIBAWA PULANG PESERTA & DUA PELUANG BESAR
+           =================================================================== */}
+        <section className="border-b border-slate-800/80 bg-[#080F1D] py-20 lg:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl">
+              <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
+                Output & Manfaat Praktik
+              </p>
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
+                Apa yang Anda Bawa Pulang Setelah 4 Hari Pelatihan?
+              </h2>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              {PARTICIPANT_DELIVERABLES.map((benefit, idx) => (
+                <div
+                  key={benefit}
+                  className="flex items-start gap-3.5 rounded-xl border border-slate-800 bg-[#0F172A]/80 px-5 py-4"
+                >
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#22D3EE]/12 text-[#22D3EE]">
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="flex-1">
+                    <span className="font-mono text-[11px] text-slate-500 tabular-nums">
+                      0{idx + 1}
+                    </span>
+                    <p className="mt-0.5 text-sm font-medium leading-relaxed text-[#F8FAFC]">
+                      {benefit}
+                    </p>
+                  </div>
                 </div>
               ))}
+            </div>
+
+            {/* Persuasive Dual Opportunity Block (No Income Guarantees) */}
+            <div className="mt-14">
+              <div className="text-center">
+                <p className="font-mono text-xs font-medium tracking-[0.16em] text-[#22D3EE] uppercase">
+                  Nilai Strategis Pelatihan
+                </p>
+                <h3 className="mt-2 font-display text-2xl font-bold tracking-tight text-[#F8FAFC] sm:text-3xl">
+                  Satu Pelatihan, Dua Peluang Besar.
+                </h3>
+              </div>
+
+              <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="rounded-2xl border border-[#22D3EE]/30 bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#22D3EE]/10 p-7 sm:p-8">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE]">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <h4 className="mt-5 font-display text-xl font-bold text-[#F8FAFC]">
+                    Kemandirian Digital Lembaga
+                  </h4>
+                  <p className="mt-3 text-sm leading-relaxed text-[#94A3B8] sm:text-[15px]">
+                    Bangun dan kembangkan sistem digital sekolah atau pesantren Anda secara mandiri,
+                    sehingga dapat menekan ketergantungan pada vendor eksternal dan menyesuaikan fitur
+                    aplikasi dengan kebutuhan nyata lembaga.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-[#10B981]/30 bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#10B981]/10 p-7 sm:p-8">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#10B981]/35 bg-[#10B981]/12 text-[#10B981]">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <h4 className="mt-5 font-display text-xl font-bold text-[#F8FAFC]">
+                    Peluang Bisnis Digital
+                  </h4>
+                  <p className="mt-3 text-sm leading-relaxed text-[#94A3B8] sm:text-[15px]">
+                    Keterampilan membangun dan mempublikasikan aplikasi berbasis AI membuka wawasan
+                    untuk merintis jasa pembuatan aplikasi bagi lembaga, UMKM, maupun memasarkan
+                    aplikasi sebagai produk digital.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1071,11 +1265,94 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                   <div className="mt-7 flex items-start gap-3 rounded-xl border border-slate-800 bg-[#080F1D]/70 p-4 text-xs leading-relaxed text-[#94A3B8]">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
                     <span>
-                      Akses Komunitas Sekolah AI Kita langsung terbuka setelah Anda mengunggah bukti
-                      transfer pada halaman pendaftaran.
+                      Akses resmi Komunitas Sekolah AI Kita terbuka otomatis pada halaman status
+                      pendaftaran Anda setelah pembayaran diverifikasi <strong>LUNAS</strong> oleh
+                      admin SAKITA.
                     </span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Verifiable Transparency & Official Registration Mechanism Block */}
+            <div className="mt-8 rounded-2xl border border-slate-800 bg-[#080F1D]/85 p-6 sm:p-8">
+              <div className="flex flex-col gap-4 border-b border-slate-800 pb-6 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
+                    Transparansi & Keamanan Pendaftaran
+                  </p>
+                  <h3 className="mt-1.5 font-display text-xl font-bold text-[#F8FAFC]">
+                    Mekanisme Resmi Penyelenggaraan Sekolah AI Kita (SAKITA)
+                  </h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setLegalDialog('privacy')}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0F172A] px-3.5 text-xs font-medium text-[#F8FAFC] transition-colors hover:border-[#22D3EE] hover:text-[#22D3EE]"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    <span>Kebijakan Privasi</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLegalDialog('terms')}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0F172A] px-3.5 text-xs font-medium text-[#F8FAFC] transition-colors hover:border-[#22D3EE] hover:text-[#22D3EE]"
+                  >
+                    <FileCheck2 className="h-3.5 w-3.5" />
+                    <span>Ketentuan Pendaftaran</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-800/90 bg-[#0F172A]/70 p-4">
+                  <p className="font-mono text-xs font-semibold text-[#22D3EE]">01 · Pendaftaran Resmi</p>
+                  <p className="mt-1.5 text-sm font-semibold text-[#F8FAFC]">
+                    Isi Formulir & Dapatkan Nomor Registrasi
+                  </p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-[#94A3B8]">
+                    Setiap peserta memperoleh nomor registrasi unik dan tautan status pribadi untuk
+                    memantau proses pendaftaran secara transparan.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-800/90 bg-[#0F172A]/70 p-4">
+                  <p className="font-mono text-xs font-semibold text-[#22D3EE]">02 · Transfer Bank Langsung</p>
+                  <p className="mt-1.5 text-sm font-semibold text-[#F8FAFC]">
+                    Rekening Resmi & Unggah Bukti Aman
+                  </p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-[#94A3B8]">
+                    Pembayaran dilakukan langsung melalui transfer bank ke rekening resmi yang tertera
+                    pada tahap pembayaran, lalu unggah bukti transfer secara privat.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-800/90 bg-[#0F172A]/70 p-4">
+                  <p className="font-mono text-xs font-semibold text-[#10B981]">03 · Verifikasi Admin SAKITA</p>
+                  <p className="mt-1.5 text-sm font-semibold text-[#F8FAFC]">
+                    Status LUNAS, E-Tiket & Akses Komunitas
+                  </p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-[#94A3B8]">
+                    Admin memverifikasi bukti transfer secara resmi. Setelah berstatus LUNAS, e-tiket
+                    kehadiran dan tautan Komunitas SAKITA aktif otomatis.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/80 pt-4 text-xs text-[#94A3B8]">
+                <span>
+                  Penyelenggara: <strong className="text-[#F8FAFC]">Sekolah AI Kita (SAKITA)</strong> ·
+                  Lokasi: <strong className="text-[#F8FAFC]">{activeProgram.location}</strong>
+                </span>
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => handleTrackWhatsappClick('trust_section_wa')}
+                  className="inline-flex items-center gap-1.5 font-semibold text-[#10B981] hover:underline"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>WhatsApp Resmi: {settings.whatsappNumber || '0851-2163-4560'}</span>
+                </a>
               </div>
             </div>
           </div>
@@ -1156,6 +1433,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                   href={waLink}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => handleTrackWhatsappClick('final_cta_wa')}
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#080F1D] px-6 text-sm font-semibold text-[#F8FAFC] transition-colors hover:border-[#10B981]/60 hover:text-[#10B981] whitespace-nowrap shrink-0"
                 >
                   <MessageCircle className="h-4 w-4" />
@@ -1168,9 +1446,9 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
       </main>
 
       {/* =====================================================================
-          K. FOOTER
+          K. FOOTER (Extra bottom padding on mobile so sticky CTA never covers content)
          ===================================================================== */}
-      <footer className="border-t border-slate-800 bg-[#080F1D] py-12">
+      <footer className="border-t border-slate-800 bg-[#080F1D] pb-24 pt-12 lg:pb-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col justify-between gap-8 md:flex-row md:items-start">
             <div>
@@ -1184,6 +1462,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                   href={waLink}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => handleTrackWhatsappClick('footer_wa_number')}
                   className="text-[#94A3B8] hover:text-[#22D3EE]"
                 >
                   {settings.whatsappNumber || '0851-2163-4560'}
@@ -1199,6 +1478,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                 href={waLink}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => handleTrackWhatsappClick('footer_contact_wa')}
                 className="transition-colors hover:text-[#F8FAFC]"
               >
                 Hubungi Kami
@@ -1233,17 +1513,53 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
         </div>
       </footer>
 
-      {/* Floating WhatsApp Button (Unobtrusive, positioned cleanly) */}
+      {/* Desktop-only Floating WhatsApp Button (Hidden on mobile so it never collides with sticky CTA bar) */}
       <a
         href={waLink}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() => handleTrackWhatsappClick('floating_desktop_wa')}
         aria-label="Hubungi Admin SAKITA melalui WhatsApp"
-        className="no-print fixed bottom-5 left-5 z-30 inline-flex h-11 items-center gap-2 rounded-full border border-[#10B981]/40 bg-[#0F172A]/95 px-4 text-xs font-semibold text-[#F8FAFC] shadow-lg backdrop-blur-md transition-colors hover:border-[#10B981] hover:text-[#10B981]"
+        className="no-print fixed bottom-5 left-5 z-30 hidden h-11 items-center gap-2 rounded-full border border-[#10B981]/40 bg-[#0F172A]/95 px-4 text-xs font-semibold text-[#F8FAFC] shadow-lg backdrop-blur-md transition-colors hover:border-[#10B981] hover:text-[#10B981] lg:inline-flex"
       >
         <MessageCircle className="h-4 w-4 text-[#10B981]" />
-        <span className="hidden sm:inline">Tanya Admin</span>
+        <span>Tanya Admin</span>
       </a>
+
+      {/* Mobile Sticky Bottom CTA Bar (Daftar Sekarang + Tanya Admin) */}
+      <div
+        role="region"
+        aria-label="Aksi Cepat Pendaftaran"
+        className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-slate-800/95 bg-[#080F1D]/95 px-4 py-3 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.75)] backdrop-blur-md lg:hidden"
+      >
+        <div className="mx-auto flex max-w-lg items-center gap-2.5">
+          <a
+            href={waLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => handleTrackWhatsappClick('mobile_sticky_wa')}
+            className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#10B981]/45 bg-[#0F172A] px-4 text-xs font-semibold text-[#F8FAFC] transition-colors hover:border-[#10B981] hover:text-[#10B981] whitespace-nowrap"
+          >
+            <MessageCircle className="h-4 w-4 text-[#10B981]" />
+            <span>Tanya Admin</span>
+          </a>
+          <button
+            type="button"
+            disabled={isProgramClosed}
+            onClick={() => goToRegister()}
+            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#22D3EE] px-4 text-xs font-bold text-[#080F1D] transition-colors hover:bg-[#22D3EE]/90 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
+          >
+            <span>
+              {isProgramClosed
+                ? 'Pendaftaran Ditutup'
+                : isProgramFull
+                  ? 'Daftar Tunggu'
+                  : 'Daftar Sekarang'}
+            </span>
+            {!isProgramClosed && <ArrowRight className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </div>
 
       {/* Legal Modals */}
       <LegalModal

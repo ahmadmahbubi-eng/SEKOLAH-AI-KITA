@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  Lock,
   MessageCircle,
   RefreshCw,
   Users,
@@ -17,6 +18,7 @@ import { BrandMark } from '../components/BrandMark';
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
 import { formatRupiah, getPaymentStatusMeta, toWhatsappLink } from '../lib/format';
+import { trackMetaContact, trackMetaPurchase } from '../lib/metaPixel';
 import {
   fetchRegistrationTicket,
   fetchUnlockedCommunityLink,
@@ -56,14 +58,20 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
         setTicket(foundTicket);
         setSettings(webSet);
 
-        if (
-          foundTicket &&
-          (foundTicket.paymentStatus === 'menunggu_verifikasi' ||
-            foundTicket.paymentStatus === 'lunas' ||
-            foundTicket.paymentStatus === 'minta_bukti_ulang')
-        ) {
+        // STRICT SECURITY: Unlock community link & fire Meta Purchase ONLY when payment is verified LUNAS by admin
+        if (foundTicket && foundTicket.paymentStatus === 'lunas') {
+          trackMetaPurchase({
+            registrationId: foundTicket.registrationId,
+            registrationNumber: foundTicket.registrationNumber,
+            programId: foundTicket.programId,
+            programName: foundTicket.programName,
+            amount: foundTicket.amount,
+            paymentStatus: foundTicket.paymentStatus,
+          });
           const comm = await fetchUnlockedCommunityLink(token);
           if (active) setCommunityInfo(comm);
+        } else {
+          if (active) setCommunityInfo({ unlocked: false, configured: false });
         }
       } catch (err) {
         console.error('Error loading registration ticket:', err);
@@ -326,6 +334,12 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
                   href={waAdminLink}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() =>
+                    trackMetaContact({
+                      source: 'status_page_confirm_wa',
+                      programName: ticket.programName,
+                    })
+                  }
                   className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#10B981] px-5 text-xs font-bold text-[#080F1D] transition-colors hover:bg-[#10B981]/90 whitespace-nowrap"
                 >
                   <MessageCircle className="h-4 w-4" />
@@ -336,45 +350,67 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
           )}
 
           {/* =================================================================
-              SECTION KHUSUS KOMUNITAS (Unlocked ONLY after proof upload)
+              SECTION KHUSUS KOMUNITAS (STRICTLY Unlocked ONLY after Admin verifies LUNAS)
              ================================================================= */}
           {!isWaitlist && ticket.paymentStatus !== 'belum_unggah' && (
             <div className="no-print mt-8 rounded-2xl border border-[#22D3EE]/30 bg-gradient-to-br from-[#080F1D] to-[#6366F1]/12 p-6 sm:p-7">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/10 text-[#22D3EE]">
-                  <Users className="h-5 w-5" />
+                  {isLunas ? <Users className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
                 </div>
                 <div>
                   <h2 className="font-display text-lg font-bold text-[#F8FAFC]">
-                    Perjalanan Belajar Anda Dimulai Sekarang.
+                    {isLunas
+                      ? 'Akses Resmi Komunitas Sekolah AI Kita Terbuka'
+                      : 'Akses Komunitas Menunggu Verifikasi Pembayaran'}
                   </h2>
                   <p className="mt-1.5 text-sm leading-relaxed text-[#94A3B8]">
-                    {communityInfo.description ||
-                      'Bergabunglah dengan Komunitas Sekolah AI Kita untuk mendapatkan informasi persiapan pelatihan, berdiskusi, dan terhubung dengan peserta lainnya.'}
+                    {isLunas
+                      ? communityInfo.description ||
+                        'Pembayaran Anda telah terverifikasi LUNAS. Bergabunglah dengan Komunitas Sekolah AI Kita untuk mendapatkan informasi persiapan pelatihan, berdiskusi, dan terhubung dengan peserta lainnya.'
+                      : 'Demi menjaga keamanan dan privasi komunitas peserta, tautan resmi Komunitas Sekolah AI Kita hanya dibuka setelah pembayaran Anda diverifikasi dan berstatus LUNAS oleh admin SAKITA.'}
                   </p>
                 </div>
               </div>
 
-              {communityInfo.unlocked && communityInfo.configured && communityInfo.whatsappInviteUrl ? (
-                <div className="mt-5">
-                  <a
-                    href={communityInfo.whatsappInviteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#10B981] px-6 text-sm font-bold tracking-wide text-[#080F1D] transition-colors hover:bg-[#10B981]/90"
-                  >
-                    <span>GABUNG KOMUNITAS SEKOLAH AI KITA</span>
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                  <p className="mt-2 text-center text-[11px] text-[#94A3B8]">
-                    Tautan khusus peserta terdaftar · Mohon tidak disebarluaskan ke publik.
-                  </p>
-                </div>
+              {isLunas ? (
+                communityInfo.unlocked && communityInfo.configured && communityInfo.whatsappInviteUrl ? (
+                  <div className="mt-5">
+                    <a
+                      href={communityInfo.whatsappInviteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#10B981] px-6 text-sm font-bold tracking-wide text-[#080F1D] transition-colors hover:bg-[#10B981]/90"
+                    >
+                      <span>GABUNG KOMUNITAS SEKOLAH AI KITA</span>
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                    <p className="mt-2 text-center text-[11px] text-[#94A3B8]">
+                      Tautan eksklusif peserta terverifikasi LUNAS · Mohon tidak disebarluaskan ke publik.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-xl border border-slate-700 bg-[#0F172A]/90 p-4 text-xs leading-relaxed text-[#94A3B8]">
+                    Tautan undangan grup Komunitas Sekolah AI Kita saat ini sedang disiapkan oleh
+                    administrator. Silakan hubungi admin melalui tombol <strong>Hubungi Admin</strong>{' '}
+                    di bawah untuk mendapatkan akses langsung ke komunitas peserta.
+                  </div>
+                )
               ) : (
-                <div className="mt-5 rounded-xl border border-slate-700 bg-[#0F172A]/90 p-4 text-xs leading-relaxed text-[#94A3B8]">
-                  Tautan undangan grup Komunitas Sekolah AI Kita saat ini belum diaktifkan oleh
-                  administrator. Silakan hubungi admin melalui tombol <strong>Hubungi Admin</strong>{' '}
-                  di bawah untuk mendapatkan akses langsung ke komunitas peserta.
+                <div className="mt-5 flex flex-col gap-3 rounded-xl border border-slate-700/80 bg-[#0F172A]/90 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs leading-relaxed text-[#94A3B8]">
+                    Simpan tautan status pribadi Anda di bawah ini. Setelah admin memverifikasi
+                    transfer Anda menjadi <strong className="text-[#10B981]">LUNAS</strong>, tombol
+                    gabung komunitas akan aktif otomatis di halaman ini.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-600 px-3.5 text-xs font-semibold text-[#F8FAFC] transition-colors hover:border-[#22D3EE] hover:text-[#22D3EE] whitespace-nowrap"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Cek Ulang Status</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -421,6 +457,12 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
                 href={waAdminLink}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() =>
+                  trackMetaContact({
+                    source: 'status_page_footer_wa',
+                    programName: ticket.programName,
+                  })
+                }
                 className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-700 px-4 text-sm font-medium text-[#F8FAFC] hover:border-[#10B981] hover:text-[#10B981]"
               >
                 <MessageCircle className="h-4 w-4" />

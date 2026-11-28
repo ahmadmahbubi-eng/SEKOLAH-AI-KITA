@@ -34,22 +34,26 @@ try {
   console.error('Failed to read firebase-applet-config.json:', err);
 }
 
-async function verifyTicketSubmittedInFirestore(accessToken: string): Promise<boolean> {
+async function getTicketStatusInFirestore(accessToken: string): Promise<string | null> {
   if (!FIREBASE_PROJECT_ID || !/^[a-zA-Z0-9_-]{32,128}$/.test(accessToken)) {
-    return false;
+    return null;
   }
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}/databases/${encodeURIComponent(FIREBASE_DATABASE_ID)}/documents/registration_tickets/${encodeURIComponent(accessToken)}`;
     const resp = await fetch(url);
-    if (!resp.ok) return false;
+    if (!resp.ok) return null;
     const data = (await resp.json()) as {
       fields?: { paymentStatus?: { stringValue?: string } };
     };
-    const status = data.fields?.paymentStatus?.stringValue || '';
-    return status === 'menunggu_verifikasi' || status === 'lunas';
+    return data.fields?.paymentStatus?.stringValue || null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function verifyTicketSubmittedInFirestore(accessToken: string): Promise<boolean> {
+  const status = await getTicketStatusInFirestore(accessToken);
+  return status === 'menunggu_verifikasi' || status === 'lunas';
 }
 
 // Isolated storage directories strictly outside dist/
@@ -139,7 +143,7 @@ let notifRuntimeConfig: NotifRuntimeConfig = readJsonFile<NotifRuntimeConfig>(NO
   adminWhatsapp: DEFAULT_ADMIN_WHATSAPP,
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
-    'Halo {{nama}},\n\nSelamat! Pendaftaran Anda pada program {{program}} dengan nomor registrasi {{registrasi}} dan bukti transfer telah kami terima.\nStatus saat ini: Menunggu Verifikasi.\n\nAkses Komunitas Sekolah AI Kita: {{komunitas}}\n\nSalam hangat,\nTim Sekolah AI Kita (SAKITA)',
+    'Halo {{nama}},\n\nTerima kasih! Pendaftaran Anda pada program {{program}} dengan nomor registrasi {{registrasi}} dan bukti transfer telah kami terima.\nStatus saat ini: Menunggu Verifikasi.\n\nAkses Komunitas Sekolah AI Kita akan otomatis terbuka di halaman status pendaftaran Anda setelah pembayaran diverifikasi LUNAS oleh admin SAKITA.\n\nSalam hangat,\nTim Sekolah AI Kita (SAKITA)',
   adminEmailSubject: 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA',
   adminEmailTemplate:
     'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
@@ -147,7 +151,7 @@ let notifRuntimeConfig: NotifRuntimeConfig = readJsonFile<NotifRuntimeConfig>(NO
     '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
-    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{registrasi}}) telah diverifikasi dan berstatus LUNAS.\n\nTanggal: {{tanggal}}\nLokasi: {{lokasi}}\n\nSilakan persiapkan laptop pribadi dan ikuti informasi teknis di Komunitas Sekolah AI Kita.\n\nSampai jumpa di Jambi!\nTim SAKITA',
+    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{registrasi}}) telah diverifikasi dan berstatus LUNAS.\n\nTanggal: {{tanggal}}\nLokasi: {{lokasi}}\n\nAkses Resmi Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nSilakan persiapkan laptop pribadi dan ikuti informasi teknis di Komunitas Sekolah AI Kita.\n\nSampai jumpa di Jambi!\nTim SAKITA',
 });
 
 if (['085769427335', '6285769427335'].includes((notifRuntimeConfig.adminWhatsapp || '').replace(/\D/g, ''))) {
@@ -743,19 +747,24 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // 7. Protected Community Link Unlock (ONLY available after proof upload, NEVER public)
-  app.post('/api/community/access', rateLimit('community_unlock', 30, 15 * 60 * 1000), (req, res) => {
+  // 7. Protected Community Link Unlock (STRICTLY ONLY after admin verifies payment as LUNAS)
+  app.post('/api/community/access', rateLimit('community_unlock', 30, 15 * 60 * 1000), async (req, res) => {
     const { accessToken } = req.body as { accessToken?: string };
     if (typeof accessToken !== 'string' || !/^[a-zA-Z0-9_-]{32,128}$/.test(accessToken)) {
-      res.status(403).json({ error: 'Akses komunitas memerlukan bukti pendaftaran yang valid.' });
+      res.status(403).json({
+        unlocked: false,
+        configured: false,
+        error: 'Akses komunitas memerlukan token pendaftaran yang valid.',
+      });
       return;
     }
 
-    const hasProof = Object.values(proofIndex).some((rec) => rec.accessToken === accessToken);
-    if (!hasProof) {
+    const ticketStatus = await getTicketStatusInFirestore(accessToken);
+    if (ticketStatus !== 'lunas') {
       res.status(403).json({
         unlocked: false,
-        error: 'Link komunitas tersedia segera setelah bukti transfer berhasil diunggah.',
+        configured: false,
+        error: 'Akses Komunitas Sekolah AI Kita hanya terbuka setelah pembayaran diverifikasi LUNAS oleh admin.',
       });
       return;
     }
@@ -810,10 +819,9 @@ async function startServer() {
 
     const baseKey = `submission:${registrationNumber}`;
     const appUrl = (process.env.APP_URL || 'https://sekolahaikita.my.id').replace(/\/$/, '');
-    const communityLink =
-      communityGate.isActive && communityGate.whatsappInviteUrl
-        ? communityGate.whatsappInviteUrl
-        : 'Hubungi admin SAKITA melalui WhatsApp untuk mendapatkan tautan komunitas.';
+    // Do NOT leak community invite URL before admin verifies payment as LUNAS
+    const communityStatusNote =
+      'Tersedia otomatis pada halaman status pendaftaran Anda setelah pembayaran diverifikasi LUNAS oleh admin SAKITA.';
 
     const vars: Record<string, string> = {
       nama: String(fullName).slice(0, 140),
@@ -825,7 +833,7 @@ async function startServer() {
       pengirim: String(senderName || fullName).slice(0, 140),
       bank: String(senderBank || '-').slice(0, 100),
       tanggal_transfer: String(transferDate || '-').slice(0, 30),
-      komunitas: communityLink,
+      komunitas: communityStatusNote,
       dashboard: `${appUrl}/admin`,
     };
 
@@ -921,12 +929,18 @@ async function startServer() {
       return;
     }
 
+    const verifiedCommunityLink =
+      communityGate.isActive && communityGate.whatsappInviteUrl
+        ? communityGate.whatsappInviteUrl
+        : 'Silakan buka halaman status e-tiket Anda atau hubungi admin SAKITA melalui WhatsApp resmi.';
+
     const vars: Record<string, string> = {
       nama: String(fullName),
       registrasi: String(registrationNumber),
       program: String(programName || ''),
       tanggal: String(dateLabel || '28–31 Desember 2026'),
       lokasi: String(location || 'Hotel Grand Makmur, Jambi'),
+      komunitas: verifiedCommunityLink,
     };
     const subject = notifRuntimeConfig.verifiedEmailSubject || 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita';
     const body = renderTemplate(notifRuntimeConfig.verifiedEmailTemplate, vars);

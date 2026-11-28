@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
+  ADDITIONAL_ADMIN_FAQ_QUESTIONS,
   DEFAULT_BANK_SETTINGS,
   DEFAULT_COMMUNITY_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -29,6 +30,7 @@ import type {
   AdminUserRecord,
   BankSettings,
   CommunitySettings,
+  FaqItem,
   NotificationLog,
   NotificationSettings,
   Payment,
@@ -437,12 +439,50 @@ export async function fetchPublicTrainers(): Promise<TrainerProfile[]> {
 }
 
 const LEGACY_WHATSAPP_DIGITS = new Set(['085769427335', '6285769427335']);
-const LEGACY_HERO_SUBHEADLINE = 'Bangun Sistem Digital Sendiri dengan AI. Tanpa Harus Bisa Coding.';
+const LEGACY_HERO_HEADLINES = new Set(['Saatnya Sekolah dan Pesantren Anda Naik Kelas.']);
+const LEGACY_HERO_SUBHEADLINES = new Set([
+  'Bangun Sistem Digital Sendiri dengan AI. Tanpa Harus Bisa Coding.',
+  'Belajar AI, Bangun Aplikasi Sendiri, dan Buka Peluang Penghasilan Baru.',
+]);
 
 function isLegacyWhatsappNumber(val?: string): boolean {
   if (!val) return false;
   const digits = val.replace(/\D/g, '');
   return LEGACY_WHATSAPP_DIGITS.has(digits);
+}
+
+function mergeAdminFaqSlots(existingFaqs: FaqItem[] | undefined): { faqs: FaqItem[]; changed: boolean } {
+  const baseList = Array.isArray(existingFaqs) && existingFaqs.length > 0
+    ? existingFaqs.map((item) => ({ ...item }))
+    : DEFAULT_WEBSITE_SETTINGS.faqs.map((item) => ({ ...item }));
+
+  let changed = !Array.isArray(existingFaqs) || existingFaqs.length === 0;
+
+  // Update legacy community FAQ answer if it still promises instant unlock before LUNAS verification
+  for (let i = 0; i < baseList.length; i += 1) {
+    if (
+      baseList[i].answer &&
+      baseList[i].answer.includes('segera setelah Anda berhasil mengunggah bukti transfer')
+    ) {
+      baseList[i].answer =
+        'Tautan undangan resmi Komunitas Sekolah AI Kita (SAKITA) akan terbuka secara otomatis pada halaman status pendaftaran Anda setelah pembayaran diverifikasi dan berstatus LUNAS oleh admin SAKITA.';
+      changed = true;
+    }
+  }
+
+  const normalizedExisting = new Set(
+    baseList.map((f) => f.question.trim().toLowerCase().replace(/\s+/g, ' ')),
+  );
+  for (const question of ADDITIONAL_ADMIN_FAQ_QUESTIONS) {
+    const key = question.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!normalizedExisting.has(key)) {
+      baseList.push({ question, answer: '' });
+      normalizedExisting.add(key);
+      changed = true;
+    }
+  }
+
+  return { faqs: baseList, changed };
 }
 
 export async function fetchWebsiteSettings(): Promise<WebsiteSettings> {
@@ -454,7 +494,10 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings> {
     if (isLegacyWhatsappNumber(merged.whatsappNumber)) {
       merged.whatsappNumber = DEFAULT_WEBSITE_SETTINGS.whatsappNumber;
     }
-    if (merged.heroSubheadline === LEGACY_HERO_SUBHEADLINE) {
+    if (LEGACY_HERO_HEADLINES.has((merged.heroHeadline || '').trim())) {
+      merged.heroHeadline = DEFAULT_WEBSITE_SETTINGS.heroHeadline;
+    }
+    if (LEGACY_HERO_SUBHEADLINES.has((merged.heroSubheadline || '').trim())) {
       merged.heroSubheadline = DEFAULT_WEBSITE_SETTINGS.heroSubheadline;
       merged.heroDescription = DEFAULT_WEBSITE_SETTINGS.heroDescription;
       merged.tagline = DEFAULT_WEBSITE_SETTINGS.tagline;
@@ -462,6 +505,8 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings> {
     if (!Array.isArray(merged.hotelGallery) || merged.hotelGallery.length === 0) {
       merged.hotelGallery = OFFICIAL_HOTEL_GALLERY;
     }
+    const faqMerged = mergeAdminFaqSlots(merged.faqs);
+    merged.faqs = faqMerged.faqs;
     return merged;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
@@ -922,14 +967,20 @@ export async function fetchUnlockedCommunityLink(accessToken: string): Promise<{
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accessToken }),
     });
-    if (resp.ok && isJsonResponse(resp)) {
-      return (await resp.json()) as {
-        unlocked: boolean;
-        configured: boolean;
-        communityName?: string;
-        description?: string;
-        whatsappInviteUrl?: string;
-      };
+    if (isJsonResponse(resp)) {
+      if (resp.ok) {
+        return (await resp.json()) as {
+          unlocked: boolean;
+          configured: boolean;
+          communityName?: string;
+          description?: string;
+          whatsappInviteUrl?: string;
+        };
+      }
+      // Explicit 403/400 from server means payment is NOT verified LUNAS — never bypass!
+      if (resp.status === 403 || resp.status === 400) {
+        return { unlocked: false, configured: false };
+      }
     }
   } catch {
     // Fallback to Firestore token verification below when deployed statically
@@ -940,8 +991,8 @@ export async function fetchUnlockedCommunityLink(accessToken: string): Promise<{
     if (!ticket) {
       return { unlocked: false, configured: false };
     }
-    const eligible =
-      ticket.paymentStatus === 'menunggu_verifikasi' || ticket.paymentStatus === 'lunas';
+    // STRICT SECURITY: Community invite ONLY unlocks after admin officially verifies payment as LUNAS
+    const eligible = ticket.paymentStatus === 'lunas';
     if (!eligible) {
       return { unlocked: false, configured: false };
     }
@@ -1095,13 +1146,20 @@ export async function bootstrapAdminEnvironment(): Promise<void> {
           if (isLegacyWhatsappNumber(String(existingData.whatsappNumber || ''))) {
             patch.whatsappNumber = DEFAULT_WEBSITE_SETTINGS.whatsappNumber;
           }
-          if (String(existingData.heroSubheadline || '') === LEGACY_HERO_SUBHEADLINE) {
+          if (LEGACY_HERO_HEADLINES.has(String(existingData.heroHeadline || '').trim())) {
+            patch.heroHeadline = DEFAULT_WEBSITE_SETTINGS.heroHeadline;
+          }
+          if (LEGACY_HERO_SUBHEADLINES.has(String(existingData.heroSubheadline || '').trim())) {
             patch.heroSubheadline = DEFAULT_WEBSITE_SETTINGS.heroSubheadline;
             patch.heroDescription = DEFAULT_WEBSITE_SETTINGS.heroDescription;
             patch.tagline = DEFAULT_WEBSITE_SETTINGS.tagline;
           }
           if (!Array.isArray(existingData.hotelGallery) || existingData.hotelGallery.length === 0) {
             patch.hotelGallery = OFFICIAL_HOTEL_GALLERY;
+          }
+          const faqCheck = mergeAdminFaqSlots(existingData.faqs as FaqItem[] | undefined);
+          if (faqCheck.changed) {
+            patch.faqs = faqCheck.faqs;
           }
           if (Object.keys(patch).length > 0) {
             await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
