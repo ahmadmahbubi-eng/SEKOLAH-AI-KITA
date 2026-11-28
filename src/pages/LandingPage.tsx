@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Clock,
   Code2,
   Copy,
   ExternalLink,
