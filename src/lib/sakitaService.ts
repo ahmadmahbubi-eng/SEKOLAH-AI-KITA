@@ -23,6 +23,7 @@ import {
   DEFAULT_TRAINER_SECTION_ORDER,
   DEFAULT_TRAINER_SECTION_VISIBILITY,
   DEFAULT_WEBSITE_SETTINGS,
+  getTrainingPackageByCode,
   OFFICIAL_HOTEL_GALLERY,
   OFFICIAL_PRIMARY_TRAINER_PHOTO,
 } from './defaults';
@@ -39,6 +40,7 @@ import type {
   RegistrationTicket,
   TrainerProfile,
   TrainerSectionKey,
+  TrainingPackageCode,
   WebsiteSettings,
 } from '../types';
 
@@ -544,6 +546,7 @@ export async function fetchRegistrationTicket(accessToken: string): Promise<Regi
 // =========================================================================
 export interface CreateRegistrationInput {
   programId: string;
+  packageCode: TrainingPackageCode;
   fullName: string;
   gender: 'Laki-laki' | 'Perempuan';
   whatsapp: string;
@@ -564,6 +567,10 @@ export async function createRegistrationTransaction(
   const trimmedName = input.fullName.trim();
   const trimmedEmail = input.email.trim().toLowerCase();
   const localNormalizedWa = normalizeWhatsappID(input.whatsapp.trim());
+  const localPackage = getTrainingPackageByCode(input.packageCode);
+  if (!localPackage) {
+    throw new Error('Silakan pilih paket pelatihan yang valid (Paket Hemat atau Paket Premium).');
+  }
   if (trimmedName.length < 2) {
     throw new Error('Nama lengkap wajib diisi minimal 2 karakter.');
   }
@@ -578,6 +585,7 @@ export async function createRegistrationTransaction(
   let registrationId = `reg_${randomHex(12)}`;
   let accessToken = randomHex(24);
   let normalizedWhatsapp = localNormalizedWa;
+  let canonicalPackage = localPackage;
 
   try {
     const initResp = await fetch('/api/registration/init', {
@@ -587,6 +595,7 @@ export async function createRegistrationTransaction(
         fullName: trimmedName,
         whatsapp: input.whatsapp.trim(),
         email: trimmedEmail,
+        packageCode: localPackage.code,
       }),
     });
     if (isJsonResponse(initResp)) {
@@ -594,6 +603,7 @@ export async function createRegistrationTransaction(
         registrationId?: string;
         accessToken?: string;
         normalizedWhatsapp?: string;
+        packageCode?: string;
         error?: string;
       };
       if (!initResp.ok) {
@@ -603,6 +613,10 @@ export async function createRegistrationTransaction(
         registrationId = initData.registrationId;
         accessToken = initData.accessToken;
         normalizedWhatsapp = initData.normalizedWhatsapp;
+      }
+      const serverPkg = getTrainingPackageByCode(initData.packageCode);
+      if (serverPkg) {
+        canonicalPackage = serverPkg;
       }
     }
   } catch (err) {
@@ -658,7 +672,11 @@ export async function createRegistrationTransaction(
         expectations: input.expectations.trim().slice(0, 1000),
         registrationStatus: isWaitlist ? 'waitlist' : 'pending_payment',
         paymentStatus: isWaitlist ? 'daftar_tunggu' : 'belum_unggah',
-        amount: prog.price,
+        amount: canonicalPackage.price,
+        packageCode: canonicalPackage.code,
+        packageName: canonicalPackage.name,
+        packagePrice: canonicalPackage.price,
+        includesLodging: canonicalPackage.includesLodging,
         rejectionReason: '',
         reservationExpiresAt: '',
         createdAt: serverTimestamp(),
@@ -675,7 +693,11 @@ export async function createRegistrationTransaction(
         programLocation: prog.location,
         fullName: registration.fullName,
         institution: registration.institution,
-        amount: prog.price,
+        amount: canonicalPackage.price,
+        packageCode: canonicalPackage.code,
+        packageName: canonicalPackage.name,
+        packagePrice: canonicalPackage.price,
+        includesLodging: canonicalPackage.includesLodging,
         registrationStatus: registration.registrationStatus,
         paymentStatus: registration.paymentStatus,
         rejectionReason: '',
@@ -791,6 +813,9 @@ export interface SubmitPaymentProofInput {
   accessToken: string;
   programId: string;
   programName: string;
+  packageCode?: TrainingPackageCode;
+  packageName?: string;
+  includesLodging?: boolean;
   fullName: string;
   email: string;
   institution: string;
@@ -816,6 +841,8 @@ export async function submitPaymentProofTransaction(input: SubmitPaymentProofInp
   const payRef = doc(db, 'payments', paymentId);
 
   let reservationExpiresAt = '';
+  let resolvedPackageName = input.packageName;
+  let resolvedIncludesLodging = input.includesLodging;
 
   try {
     await runTransaction(db, async (tx) => {
@@ -852,12 +879,27 @@ export async function submitPaymentProofTransaction(input: SubmitPaymentProofInp
       const ttlHours = prog.reservationHours || 48;
       reservationExpiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
 
+      const pkgFromTicket = getTrainingPackageByCode(ticket.packageCode ?? input.packageCode);
+      if (pkgFromTicket) {
+        resolvedPackageName = ticket.packageName || pkgFromTicket.name;
+        resolvedIncludesLodging =
+          typeof ticket.includesLodging === 'boolean'
+            ? ticket.includesLodging
+            : pkgFromTicket.includesLodging;
+      }
+
       const paymentDoc: Payment = {
         id: paymentId,
         registrationId: input.registrationId,
         registrationNumber: input.registrationNumber,
         accessToken: input.accessToken,
         programId: input.programId,
+        ...(pkgFromTicket
+          ? {
+              packageCode: pkgFromTicket.code,
+              packageName: resolvedPackageName || pkgFromTicket.name,
+            }
+          : {}),
         senderName: input.senderName.trim().slice(0, 140),
         senderBank: input.senderBank.trim().slice(0, 100),
         transferDate: input.transferDate,
@@ -909,6 +951,8 @@ export async function submitPaymentProofTransaction(input: SubmitPaymentProofInp
         institution: input.institution,
         position: input.position,
         programName: input.programName,
+        packageName: resolvedPackageName,
+        includesLodging: resolvedIncludesLodging,
         amount: input.transferAmount,
         senderName: input.senderName.trim(),
         senderBank: input.senderBank.trim(),
@@ -1324,6 +1368,8 @@ export async function verifyPaymentAction(params: {
           fullName: registration.fullName,
           email: registration.email,
           programName: program.name,
+          packageName: registration.packageName,
+          includesLodging: registration.includesLodging,
           dateLabel: program.dateLabel,
           location: program.location,
         }),

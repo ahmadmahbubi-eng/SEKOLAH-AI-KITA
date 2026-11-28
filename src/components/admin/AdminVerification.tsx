@@ -10,6 +10,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { getParticipantPackageInfo } from '../../lib/defaults';
 import {
   formatRupiah,
   formatTimestampID,
@@ -49,6 +50,15 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
   const selectedProgram = selectedPayment
     ? programs.find((p) => p.id === selectedPayment.programId) || null
     : null;
+  const selectedPkgInfo = selectedReg
+    ? getParticipantPackageInfo(selectedReg)
+    : selectedPayment
+      ? getParticipantPackageInfo({
+          packageCode: selectedPayment.packageCode,
+          packageName: selectedPayment.packageName,
+        })
+      : null;
+  const expectedAmount = selectedReg?.amount ?? selectedProgram?.price ?? 0;
 
   // Fetch private proof file securely with Admin Firebase ID token
   useEffect(() => {
@@ -163,6 +173,13 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
             {filteredPayments.map((pay) => {
               const active = selectedPayment?.id === pay.id;
               const meta = getPaymentStatusMeta(pay.verificationStatus);
+              const matchedReg = registrations.find((r) => r.id === pay.registrationId);
+              const payPkg = matchedReg
+                ? getParticipantPackageInfo(matchedReg)
+                : getParticipantPackageInfo({
+                    packageCode: pay.packageCode,
+                    packageName: pay.packageName,
+                  });
               return (
                 <button
                   key={pay.id}
@@ -195,6 +212,9 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
                   </div>
                   <p className={`mt-1 text-sm font-semibold ${active ? 'text-white' : 'text-slate-900'}`}>
                     {pay.senderName}
+                  </p>
+                  <p className={`mt-0.5 text-[11px] font-medium ${active ? 'text-slate-300' : 'text-slate-500'}`}>
+                    {payPkg.label} · {payPkg.lodgingShortLabel}
                   </p>
                   <div
                     className={`mt-1 flex items-center justify-between text-xs ${
@@ -231,9 +251,9 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
                   <p className="font-mono text-xl font-bold text-slate-900 tabular-nums">
                     {formatRupiah(selectedPayment.transferAmount)}
                   </p>
-                  {selectedProgram && selectedPayment.transferAmount !== selectedProgram.price && (
+                  {expectedAmount > 0 && selectedPayment.transferAmount !== expectedAmount && (
                     <p className="text-xs font-semibold text-amber-600">
-                      Selisih dari biaya program ({formatRupiah(selectedProgram.price)})
+                      Selisih dari tagihan paket ({formatRupiah(expectedAmount)})
                     </p>
                   )}
                 </div>
@@ -261,6 +281,22 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
                     {formatTimestampID(selectedPayment.createdAt)}
                   </p>
                 </div>
+                {selectedPkgInfo && (
+                  <>
+                    <div>
+                      <span className="text-slate-500">Paket Dipilih:</span>
+                      <p className="mt-0.5 font-semibold text-slate-900">
+                        {selectedPkgInfo.label} ({formatRupiah(expectedAmount)})
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Fasilitas Penginapan:</span>
+                      <p className="mt-0.5 font-semibold text-slate-900">
+                        {selectedPkgInfo.lodgingDetailLabel}
+                      </p>
+                    </div>
+                  </>
+                )}
                 {selectedReg && (
                   <>
                     <div>
@@ -342,7 +378,7 @@ export function AdminVerification({ programs, registrations, payments }: AdminVe
                     rows={2}
                     value={reasonNote}
                     onChange={(e) => setReasonNote(e.target.value)}
-                    placeholder="Contoh: Foto struk terpotong atau nominal belum sesuai Rp2.700.000."
+                    placeholder="Contoh: Foto struk terpotong atau nominal belum sesuai tagihan paket (Rp1.950.000 / Rp2.700.000)."
                     className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
                   />
                 </div>

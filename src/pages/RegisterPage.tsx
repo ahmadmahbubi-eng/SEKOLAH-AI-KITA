@@ -23,6 +23,10 @@ import {
   DEFAULT_BANK_SETTINGS,
   DEFAULT_PROGRAM,
   DEFAULT_WEBSITE_SETTINGS,
+  getParticipantPackageInfo,
+  getTrainingPackageByCode,
+  PACKAGE_LEARNING_BENEFITS,
+  TRAINING_PACKAGE_LIST,
 } from '../lib/defaults';
 import {
   computeRemainingSeats,
@@ -44,11 +48,18 @@ import {
   trackMetaInitiateCheckout,
   trackMetaLead,
 } from '../lib/metaPixel';
-import type { BankSettings, Program, RegistrationTicket, WebsiteSettings } from '../types';
+import type {
+  BankSettings,
+  Program,
+  RegistrationTicket,
+  TrainingPackageCode,
+  WebsiteSettings,
+} from '../types';
 
 interface RegisterPageProps {
   navigate: (path: string) => void;
   initialProgramId?: string;
+  initialPackageCode?: string;
   resumeToken?: string;
 }
 
@@ -88,13 +99,24 @@ const INITIAL_BIODATA: BiodataForm = {
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'application/pdf'];
 
-export function RegisterPage({ navigate, initialProgramId, resumeToken }: RegisterPageProps) {
+export function RegisterPage({
+  navigate,
+  initialProgramId,
+  initialPackageCode,
+  resumeToken,
+}: RegisterPageProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const initialResolvedPkg = getTrainingPackageByCode(initialPackageCode);
 
   const [loadingInit, setLoadingInit] = useState(true);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selectedProgramId, setSelectedProgramId] = useState<string>(initialProgramId || DEFAULT_PROGRAM.id);
+  const [selectedPackageCode, setSelectedPackageCode] = useState<TrainingPackageCode | ''>(
+    initialResolvedPkg ? initialResolvedPkg.code : '',
+  );
+  const [packageError, setPackageError] = useState('');
   const [settings, setSettings] = useState<WebsiteSettings>(DEFAULT_WEBSITE_SETTINGS);
   const [bankSettings, setBankSettings] = useState<BankSettings>(DEFAULT_BANK_SETTINGS);
 
@@ -114,7 +136,9 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
   const [senderName, setSenderName] = useState('');
   const [senderBank, setSenderBank] = useState('');
   const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [transferAmount, setTransferAmount] = useState<string>(String(DEFAULT_PROGRAM.price));
+  const [transferAmount, setTransferAmount] = useState<string>(
+    String(initialResolvedPkg ? initialResolvedPkg.price : 1950000),
+  );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -142,12 +166,18 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
           openProgs[0];
         if (preferred) {
           setSelectedProgramId(preferred.id);
-          setTransferAmount(String(preferred.price));
+          const prePkg = getTrainingPackageByCode(initialPackageCode);
+          if (prePkg) {
+            setSelectedPackageCode(prePkg.code);
+            setTransferAmount(String(prePkg.price));
+          } else {
+            setTransferAmount(String(preferred.price));
+          }
           if (!resumeToken) {
             trackMetaInitiateCheckout({
               programId: preferred.id,
-              programName: preferred.name,
-              price: preferred.price,
+              programName: prePkg ? `${preferred.name} — ${prePkg.name}` : preferred.name,
+              price: prePkg ? prePkg.price : 1950000,
             });
           }
         }
@@ -158,6 +188,9 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
           if (active && ticket) {
             setCreatedTicket(ticket);
             setSelectedProgramId(ticket.programId);
+            if (ticket.packageCode) {
+              setSelectedPackageCode(ticket.packageCode);
+            }
             setTransferAmount(String(ticket.amount));
             setSenderName(ticket.fullName);
             if (ticket.paymentStatus === 'menunggu_verifikasi' || ticket.paymentStatus === 'lunas') {
@@ -177,7 +210,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     return () => {
       active = false;
     };
-  }, [initialProgramId, resumeToken, navigate]);
+  }, [initialProgramId, initialPackageCode, resumeToken, navigate]);
 
   useEffect(() => {
     return () => {
@@ -186,6 +219,14 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
   }, [filePreviewUrl]);
 
   const activeProgram = programs.find((p) => p.id === selectedProgramId) || programs[0] || null;
+  const selectedPackage = getTrainingPackageByCode(selectedPackageCode);
+  const ticketPackageInfo = createdTicket ? getParticipantPackageInfo(createdTicket) : null;
+  const activeDisplayAmount = createdTicket
+    ? createdTicket.amount
+    : selectedPackage
+      ? selectedPackage.price
+      : null;
+
   const remainingSeats = activeProgram
     ? computeRemainingSeats(activeProgram.quota, activeProgram.confirmedCount, activeProgram.reservedCount)
     : 0;
@@ -195,8 +236,22 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     `Halo Admin SAKITA, saya membutuhkan bantuan pendaftaran${createdTicket ? ` (No. Registrasi: ${createdTicket.registrationNumber})` : ''}.`,
   );
 
+  const handleSelectPackage = (code: TrainingPackageCode) => {
+    setSelectedPackageCode(code);
+    setPackageError('');
+    const pkg = getTrainingPackageByCode(code);
+    if (pkg) {
+      setTransferAmount(String(pkg.price));
+    }
+  };
+
   const validateStep1 = (): boolean => {
     const errors: Partial<Record<keyof BiodataForm, string>> = {};
+    if (!selectedPackage) {
+      setPackageError('Wajib memilih salah satu paket pelatihan (Paket Hemat atau Paket Premium).');
+    } else {
+      setPackageError('');
+    }
     if (biodata.fullName.trim().length < 2) errors.fullName = 'Nama lengkap beserta gelar wajib diisi.';
     const normalizedWa = normalizeWhatsappID(biodata.whatsapp);
     if (!/^62[0-9]{8,15}$/.test(normalizedWa)) {
@@ -211,12 +266,18 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     if (biodata.province.trim().length < 2) errors.province = 'Provinsi wajib diisi.';
 
     setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    return Boolean(selectedPackage) && Object.keys(errors).length === 0;
   };
 
   const handleNextToStep2 = () => {
     if (!validateStep1()) {
-      toast('error', 'Periksa kembali biodata Anda', 'Beberapa kolom wajib belum diisi dengan benar.');
+      toast(
+        'error',
+        'Periksa kembali pilihan paket & biodata Anda',
+        !selectedPackage
+          ? 'Pilih Paket Hemat atau Paket Premium terlebih dahulu.'
+          : 'Beberapa kolom wajib belum diisi dengan benar.',
+      );
       return;
     }
     setStep(2);
@@ -226,6 +287,11 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
   const handleConfirmRegistration = async () => {
     if (!activeProgram) {
       toast('error', 'Program belum tersedia', 'Program pelatihan belum diaktifkan oleh administrator.');
+      return;
+    }
+    if (!selectedPackage) {
+      toast('error', 'Paket belum dipilih', 'Silakan kembali ke langkah 1 untuk memilih paket pelatihan.');
+      setStep(1);
       return;
     }
     if (!agreePrivacy || !agreeTerms) {
@@ -238,6 +304,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
     try {
       const { registration, ticket, isWaitlist } = await createRegistrationTransaction({
         programId: activeProgram.id,
+        packageCode: selectedPackage.code,
         ...biodata,
         joinWaitlistIfFull: isFull,
       });
@@ -247,7 +314,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         registrationId: registration.id,
         registrationNumber: registration.registrationNumber,
         programId: registration.programId,
-        programName: registration.programName,
+        programName: `${registration.programName} — ${registration.packageName || selectedPackage.name}`,
         amount: registration.amount,
         isWaitlist,
         privacyAccepted: agreePrivacy,
@@ -259,7 +326,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
       setCreatedEmail(registration.email);
       setCreatedPosition(registration.position);
       setSenderName(registration.fullName);
-      setTransferAmount(String(activeProgram.price));
+      setTransferAmount(String(registration.amount));
 
       if (isWaitlist) {
         toast('success', 'Terdaftar pada Daftar Tunggu', `Nomor registrasi Anda: ${registration.registrationNumber}`);
@@ -358,6 +425,9 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
         accessToken: createdTicket.accessToken,
         programId: createdTicket.programId,
         programName: createdTicket.programName,
+        packageCode: createdTicket.packageCode,
+        packageName: createdTicket.packageName,
+        includesLodging: createdTicket.includesLodging,
         fullName: createdTicket.fullName,
         email: createdEmail || biodata.email || 'peserta@sakita.id',
         institution: createdTicket.institution,
@@ -493,25 +563,51 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
           </div>
         ) : (
           <div className="rounded-2xl border border-slate-800 bg-[#0F172A] p-6 sm:p-8">
-            {/* Active Program Summary Strip */}
+            {/* Active Program & Live Package Summary Strip */}
             <div className="mb-7 flex flex-col justify-between gap-4 rounded-xl border border-slate-800 bg-[#080F1D]/80 p-4 sm:flex-row sm:items-center">
               <div>
-                <p className="text-xs text-[#94A3B8]">Program Terpilih</p>
+                <p className="text-xs text-[#94A3B8]">Program & Paket Terpilih</p>
                 <p className="mt-0.5 font-display text-base font-semibold text-[#F8FAFC]">
                   {activeProgram.name}
                 </p>
                 <p className="mt-1 text-xs text-[#94A3B8]">
                   {activeProgram.dateLabel} · {activeProgram.location}
                 </p>
+                <p className="mt-1.5 text-xs font-medium text-[#E2E8F0]">
+                  {createdTicket ? (
+                    <>
+                      <span className="text-[#22D3EE]">{ticketPackageInfo?.label}</span>
+                      {' · '}
+                      <span className="text-[#94A3B8]">{ticketPackageInfo?.lodgingShortLabel}</span>
+                    </>
+                  ) : selectedPackage ? (
+                    <>
+                      <span
+                        className={
+                          selectedPackage.accent === 'gold' ? 'text-[#EBD077]' : 'text-[#22D3EE]'
+                        }
+                      >
+                        {selectedPackage.name}
+                      </span>
+                      {' · '}
+                      <span className="text-[#94A3B8]">{selectedPackage.lodgingShortLabel}</span>
+                    </>
+                  ) : (
+                    <span className="text-amber-300">Belum memilih paket (pilih pada Langkah 1)</span>
+                  )}
+                </p>
               </div>
               <div className="text-left sm:text-right">
+                <p className="text-[11px] text-[#94A3B8]">Nominal Pembayaran</p>
                 <p className="font-mono text-lg font-bold text-[#22D3EE] tabular-nums">
-                  {formatRupiah(activeProgram.price)}
+                  {activeDisplayAmount !== null
+                    ? formatRupiah(activeDisplayAmount)
+                    : 'Mulai Rp1.950.000'}
                 </p>
                 <p className={`text-xs font-medium ${isFull ? 'text-amber-400' : 'text-[#10B981]'}`}>
                   {isFull
                     ? 'Pendaftaran Penuh · Mode Daftar Tunggu'
-                    : 'Pendaftaran Dibuka · Kuota Terbatas'}
+                    : `Pendaftaran Dibuka · Kuota Maks. ${activeProgram.quota} Peserta`}
                 </p>
               </div>
             </div>
@@ -532,7 +628,7 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
             )}
 
             {/* ===============================================================
-                STEP 1 — BIODATA PESERTA
+                STEP 1 — PILIH PAKET & BIODATA PESERTA
                =============================================================== */}
             {step === 1 && (
               <div className="space-y-6">
@@ -546,19 +642,134 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                       onChange={(e) => {
                         const nextId = e.target.value;
                         setSelectedProgramId(nextId);
-                        const nextProg = programs.find((p) => p.id === nextId);
-                        if (nextProg) setTransferAmount(String(nextProg.price));
                       }}
                       className="mt-1.5 w-full rounded-xl border border-slate-700 bg-[#080F1D] px-4 py-3 text-sm text-[#F8FAFC] focus:border-[#22D3EE] focus:outline-none"
                     >
                       {programs.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({p.dateLabel}) — {formatRupiah(p.price)}
+                          {p.name} ({p.dateLabel})
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
+
+                {/* Mandatory Package Selection */}
+                <div className="rounded-xl border border-slate-800 bg-[#080F1D]/70 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-sm font-semibold text-[#F8FAFC]">
+                        Pilih Paket Pelatihan <span className="text-rose-400">*</span>
+                      </label>
+                      <p className="mt-0.5 text-xs text-[#94A3B8]">
+                        Materi 4 hari intensif dan 10 proyek aplikasi sama di kedua paket. Perbedaan
+                        hanya pada fasilitas penginapan hotel.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2" role="radiogroup" aria-label="Pilihan Paket Pelatihan">
+                    {TRAINING_PACKAGE_LIST.map((pkg) => {
+                      const isSelected = selectedPackageCode === pkg.code;
+                      const isGold = pkg.accent === 'gold';
+                      return (
+                        <button
+                          key={pkg.code}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => handleSelectPackage(pkg.code)}
+                          className={`flex flex-col justify-between rounded-xl border p-4 text-left transition-all ${
+                            isSelected
+                              ? isGold
+                                ? 'border-[#D4AF37] bg-[#D4AF37]/12 shadow-[0_0_0_1px_rgba(212,175,55,0.45)]'
+                                : 'border-[#22D3EE] bg-[#22D3EE]/10 shadow-[0_0_0_1px_rgba(34,211,238,0.4)]'
+                              : 'border-slate-700/90 bg-[#0F172A]/80 hover:border-slate-500'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="font-display text-base font-bold text-[#F8FAFC]">
+                                  {pkg.name}
+                                </p>
+                                <p className="mt-0.5 text-xs text-[#94A3B8]">
+                                  {pkg.lodgingShortLabel}
+                                </p>
+                              </div>
+                              <span
+                                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                                  isSelected
+                                    ? isGold
+                                      ? 'border-[#D4AF37] bg-[#D4AF37] text-[#080F1D]'
+                                      : 'border-[#22D3EE] bg-[#22D3EE] text-[#080F1D]'
+                                    : 'border-slate-600 bg-[#080F1D]'
+                                }`}
+                              >
+                                {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                              </span>
+                            </div>
+
+                            <p
+                              className={`mt-3 font-mono text-xl font-bold tabular-nums ${
+                                isGold ? 'text-[#EBD077]' : 'text-[#22D3EE]'
+                              }`}
+                            >
+                              {formatRupiah(pkg.price)}
+                            </p>
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2.5 text-[11px]">
+                            <span
+                              className={
+                                isGold
+                                  ? 'font-semibold text-[#EBD077]'
+                                  : 'font-semibold text-[#34D399]'
+                              }
+                            >
+                              {pkg.highlightLabel}
+                            </span>
+                            <span className="text-[#94A3B8]">
+                              {pkg.includesLodging ? 'Termasuk Hotel' : 'Tanpa Hotel'}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {packageError && (
+                    <p className="mt-2.5 text-xs font-medium text-rose-400">{packageError}</p>
+                  )}
+
+                  {/* Live Package Summary Box */}
+                  {selectedPackage && (
+                    <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-800 bg-[#0F172A] p-4 text-xs sm:grid-cols-2">
+                      <div>
+                        <span className="text-[#94A3B8]">Nama Paket:</span>
+                        <p className="mt-0.5 font-semibold text-[#F8FAFC]">{selectedPackage.name}</p>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8]">Fasilitas Penginapan:</span>
+                        <p className="mt-0.5 font-medium text-[#E2E8F0]">
+                          {selectedPackage.lodgingShortLabel}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8]">Total Biaya Pelatihan:</span>
+                        <p className="mt-0.5 font-mono font-bold text-[#F8FAFC] tabular-nums">
+                          {formatRupiah(selectedPackage.price)}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8]">Nominal Pembayaran:</span>
+                        <p className="mt-0.5 font-mono font-bold text-[#22D3EE] tabular-nums">
+                          {formatRupiah(selectedPackage.price)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div className="sm:col-span-2">
@@ -796,9 +1007,9 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                   </div>
                 </div>
 
-                {/* Program Details Summary */}
+                {/* Program & Package Details Summary */}
                 <div className="rounded-xl border border-slate-800 bg-[#080F1D]/70 p-5">
-                  <p className="text-xs font-medium text-[#22D3EE]">Ringkasan Program & Fasilitas</p>
+                  <p className="text-xs font-medium text-[#22D3EE]">Ringkasan Program, Paket & Fasilitas</p>
                   <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div>
                       <span className="text-xs text-[#94A3B8]">Nama Pelatihan:</span>
@@ -810,9 +1021,44 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                         {activeProgram.dateLabel} · {activeProgram.location}
                       </p>
                     </div>
+                    {selectedPackage && (
+                      <>
+                        <div>
+                          <span className="text-xs text-[#94A3B8]">Paket Pilihan:</span>
+                          <p
+                            className={`font-semibold ${
+                              selectedPackage.accent === 'gold' ? 'text-[#EBD077]' : 'text-[#22D3EE]'
+                            }`}
+                          >
+                            {selectedPackage.name} ({selectedPackage.highlightLabel})
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-[#94A3B8]">Fasilitas Penginapan:</span>
+                          <p className="font-medium text-[#F8FAFC]">
+                            {selectedPackage.lodgingDetailLabel}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-[#94A3B8]">Total Biaya Pelatihan:</span>
+                          <p className="font-mono font-bold text-[#F8FAFC] tabular-nums">
+                            {formatRupiah(selectedPackage.price)}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-[#94A3B8]">Nominal Pembayaran:</span>
+                          <p className="font-mono font-bold text-[#22D3EE] tabular-nums">
+                            {formatRupiah(selectedPackage.price)}
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-slate-800 pt-3 text-xs text-[#94A3B8]">
-                    {activeProgram.facilities.map((f) => (
+                    {[
+                      ...PACKAGE_LEARNING_BENEFITS,
+                      ...(selectedPackage ? selectedPackage.confirmedFacilities : activeProgram.facilities),
+                    ].map((f) => (
                       <span key={f} className="inline-flex items-center gap-1.5">
                         <Check className="h-3.5 w-3.5 text-[#10B981]" />
                         {f}
@@ -908,10 +1154,18 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                     <p className="mt-1 font-mono text-xl font-bold text-[#F8FAFC] tabular-nums">
                       {createdTicket.registrationNumber}
                     </p>
+                    {ticketPackageInfo && (
+                      <p className="mt-1 text-xs text-[#E2E8F0]">
+                        {ticketPackageInfo.label} · {ticketPackageInfo.lodgingShortLabel}
+                      </p>
+                    )}
                   </div>
                   <div className="text-left sm:text-right">
                     <p className="text-xs text-[#94A3B8]">Peserta</p>
                     <p className="text-sm font-semibold text-[#F8FAFC]">{createdTicket.fullName}</p>
+                    <p className="mt-0.5 font-mono text-xs font-bold text-[#22D3EE] tabular-nums">
+                      {formatRupiah(createdTicket.amount)}
+                    </p>
                   </div>
                 </div>
 
@@ -1149,6 +1403,12 @@ export function RegisterPage({ navigate, initialProgramId, resumeToken }: Regist
                       onChange={(e) => setTransferAmount(e.target.value)}
                       className="mt-1.5 w-full rounded-xl border border-slate-700 bg-[#080F1D] px-4 py-3 font-mono text-sm text-[#F8FAFC] tabular-nums focus:border-[#22D3EE] focus:outline-none"
                     />
+                    <p className="mt-1 text-[11px] text-[#94A3B8]">
+                      Tagihan {ticketPackageInfo?.label || 'paket terpilih'}:{' '}
+                      <strong className="font-mono text-[#22D3EE]">
+                        {formatRupiah(createdTicket.amount)}
+                      </strong>
+                    </p>
                   </div>
                 </div>
 

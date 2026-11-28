@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { BrandMark } from '../components/BrandMark';
 import { useToast } from '../context/ToastContext';
-import { DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
+import { DEFAULT_WEBSITE_SETTINGS, getParticipantPackageInfo } from '../lib/defaults';
 import { formatRupiah, getPaymentStatusMeta, toWhatsappLink } from '../lib/format';
 import { trackMetaContact, trackMetaPurchase } from '../lib/metaPixel';
 import {
@@ -87,12 +87,13 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
 
   const statusUrl = `${window.location.origin}/status/${encodeURIComponent(token)}`;
   const adminDashboardUrl = `${window.location.origin}/admin`;
+  const packageInfo = ticket ? getParticipantPackageInfo(ticket) : null;
   const waAdminLink = toWhatsappLink(
     settings.whatsappNumber || '085121634560',
     ticket
       ? ticket.paymentStatus === 'menunggu_verifikasi'
-        ? `Halo Admin SAKITA, saya sudah membayar & mengunggah bukti transfer. Mohon verifikasi pendaftaran saya:\n\n• No. Registrasi: ${ticket.registrationNumber}\n• Nama: ${ticket.fullName}\n• Lembaga: ${ticket.institution}\n• Program: ${ticket.programName}\n• Nominal: ${formatRupiah(ticket.amount)}\n• Status: Menunggu Verifikasi\n\nCek verifikasi di Dashboard Admin:\n${adminDashboardUrl}`
-        : `Halo Admin SAKITA, saya ${ticket.fullName} (No. Registrasi: ${ticket.registrationNumber}) ingin mengonfirmasi status pendaftaran saya.`
+        ? `Halo Admin SAKITA, saya sudah membayar & mengunggah bukti transfer. Mohon verifikasi pendaftaran saya:\n\n• No. Registrasi: ${ticket.registrationNumber}\n• Nama: ${ticket.fullName}\n• Lembaga: ${ticket.institution}\n• Program: ${ticket.programName}\n• Paket: ${packageInfo?.label || '-'} (${packageInfo?.lodgingShortLabel || '-'})\n• Nominal: ${formatRupiah(ticket.amount)}\n• Status: Menunggu Verifikasi\n\nCek verifikasi di Dashboard Admin:\n${adminDashboardUrl}`
+        : `Halo Admin SAKITA, saya ${ticket.fullName} (No. Registrasi: ${ticket.registrationNumber}${packageInfo && !packageInfo.isLegacy ? ` — ${packageInfo.label}` : ''}) ingin mengonfirmasi status pendaftaran saya.`
       : 'Halo Admin SAKITA, saya ingin bertanya mengenai status pendaftaran saya.',
   );
 
@@ -253,7 +254,19 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
                 <dd className="mt-0.5 font-semibold">{ticket.programName}</dd>
               </div>
               <div>
-                <dt className="text-xs text-[#94A3B8] print:text-slate-500">Tanggal Pelatihan</dt>
+                <dt className="text-xs text-[#94A3B8] print:text-slate-500">Paket yang Dipilih</dt>
+                <dd className="mt-0.5 font-semibold text-[#F8FAFC] print:text-slate-900">
+                  {packageInfo?.label || 'Paket Pelatihan SAKITA'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-[#94A3B8] print:text-slate-500">Informasi Penginapan</dt>
+                <dd className="mt-0.5 text-xs font-medium leading-relaxed text-[#E2E8F0] print:text-slate-800">
+                  {packageInfo?.lodgingDetailLabel || 'Sesuai ketentuan paket terdaftar'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-[#94A3B8] print:text-slate-500">Jadwal Pelatihan</dt>
                 <dd className="mt-0.5 font-medium">{ticket.programDates}</dd>
               </div>
               <div>
@@ -261,8 +274,8 @@ export function SuccessStatusPage({ token, mode, navigate }: SuccessStatusPagePr
                 <dd className="mt-0.5 font-medium">{ticket.programLocation}</dd>
               </div>
               <div>
-                <dt className="text-xs text-[#94A3B8] print:text-slate-500">Nominal Pembayaran</dt>
-                <dd className="mt-0.5 font-mono font-bold tabular-nums">
+                <dt className="text-xs text-[#94A3B8] print:text-slate-500">Biaya Pelatihan</dt>
+                <dd className="mt-0.5 font-mono font-bold text-[#22D3EE] tabular-nums print:text-slate-900">
                   {isWaitlist ? 'Belum ada tagihan (Daftar Tunggu)' : formatRupiah(ticket.amount)}
                 </dd>
               </div>

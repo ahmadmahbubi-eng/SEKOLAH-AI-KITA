@@ -17,6 +17,21 @@ export type RegistrationStatus =
 
 export type ProgramStatus = 'open' | 'closed' | 'archived';
 
+export type TrainingPackageCode = 'paket_hemat' | 'paket_premium';
+
+export interface TrainingPackageOption {
+  code: TrainingPackageCode;
+  name: 'Paket Hemat' | 'Paket Premium';
+  price: 1950000 | 2700000;
+  includesLodging: boolean;
+  lodgingShortLabel: string;
+  lodgingDetailLabel: string;
+  highlightLabel: string;
+  ctaLabel: string;
+  accent: 'cyan' | 'gold';
+  confirmedFacilities: string[];
+}
+
 export interface ProjectItem {
   number: string;
   icon: string;
@@ -183,6 +198,10 @@ export interface Registration {
   registrationStatus: RegistrationStatus;
   paymentStatus: PaymentStatus;
   amount: number;
+  packageCode?: TrainingPackageCode;
+  packageName?: string;
+  packagePrice?: number;
+  includesLodging?: boolean;
   rejectionReason: string;
   reservationExpiresAt: string;
   createdAt?: Timestamp | unknown;
@@ -200,6 +219,10 @@ export interface RegistrationTicket {
   fullName: string;
   institution: string;
   amount: number;
+  packageCode?: TrainingPackageCode;
+  packageName?: string;
+  packagePrice?: number;
+  includesLodging?: boolean;
   registrationStatus: RegistrationStatus;
   paymentStatus: PaymentStatus;
   rejectionReason: string;
@@ -214,6 +237,8 @@ export interface Payment {
   registrationNumber: string;
   accessToken: string;
   programId: string;
+  packageCode?: TrainingPackageCode;
+  packageName?: string;
   senderName: string;
   senderBank: string;
   transferDate: string;

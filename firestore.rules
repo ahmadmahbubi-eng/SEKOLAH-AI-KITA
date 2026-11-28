@@ -118,6 +118,37 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function hasCanonicalPackageTuple(data) {
+      return (
+        data.packageCode == 'paket_hemat'
+        && data.packageName == 'Paket Hemat'
+        && data.packagePrice == 1950000
+        && data.includesLodging == false
+        && data.amount == 1950000
+      ) || (
+        data.packageCode == 'paket_premium'
+        && data.packageName == 'Paket Premium'
+        && data.packagePrice == 2700000
+        && data.includesLodging == true
+        && data.amount == 2700000
+      );
+    }
+
+    function hasValidOptionalPackageFields(data) {
+      return (
+        !('packageCode' in data)
+        && !('packageName' in data)
+        && !('packagePrice' in data)
+        && !('includesLodging' in data)
+      ) || (
+        ('packageCode' in data)
+        && ('packageName' in data)
+        && ('packagePrice' in data)
+        && ('includesLodging' in data)
+        && hasCanonicalPackageTuple(data)
+      );
+    }
+
     function isValidRegistration(data) {
       return data.keys().hasAll([
           'id', 'registrationNumber', 'accessToken', 'programId', 'programName',
@@ -130,8 +161,9 @@ service cloud.firestore {
           'id', 'registrationNumber', 'accessToken', 'programId', 'programName',
           'fullName', 'gender', 'whatsapp', 'email', 'institution', 'position',
           'city', 'province', 'aiExperience', 'expectations',
-          'registrationStatus', 'paymentStatus', 'amount', 'rejectionReason',
-          'reservationExpiresAt', 'createdAt', 'updatedAt'
+          'registrationStatus', 'paymentStatus', 'amount',
+          'packageCode', 'packageName', 'packagePrice', 'includesLodging',
+          'rejectionReason', 'reservationExpiresAt', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.id) && data.id.size() >= 16
         && isValidString(data.registrationNumber, 8, 40) && data.registrationNumber.matches('^SAKITA-[0-9]{4}-[0-9]{4,6}$')
@@ -151,6 +183,7 @@ service cloud.firestore {
         && data.registrationStatus in ['pending_payment', 'active', 'waitlist', 'cancelled', 'expired']
         && data.paymentStatus in ['belum_unggah', 'menunggu_verifikasi', 'lunas', 'ditolak', 'minta_bukti_ulang', 'daftar_tunggu']
         && data.amount is number && data.amount >= 0 && data.amount <= 500000000
+        && hasValidOptionalPackageFields(data)
         && isValidString(data.rejectionReason, 0, 500)
         && isValidString(data.reservationExpiresAt, 0, 40)
         && data.createdAt is timestamp
@@ -167,7 +200,9 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'accessToken', 'registrationId', 'registrationNumber', 'programId',
           'programName', 'programDates', 'programLocation', 'fullName',
-          'institution', 'amount', 'registrationStatus', 'paymentStatus',
+          'institution', 'amount',
+          'packageCode', 'packageName', 'packagePrice', 'includesLodging',
+          'registrationStatus', 'paymentStatus',
           'rejectionReason', 'reservationExpiresAt', 'createdAt', 'updatedAt'
         ])
         && isValidToken(data.accessToken)
@@ -180,6 +215,7 @@ service cloud.firestore {
         && isValidString(data.fullName, 2, 140)
         && isValidString(data.institution, 2, 180)
         && data.amount is number && data.amount >= 0 && data.amount <= 500000000
+        && hasValidOptionalPackageFields(data)
         && data.registrationStatus in ['pending_payment', 'active', 'waitlist', 'cancelled', 'expired']
         && data.paymentStatus in ['belum_unggah', 'menunggu_verifikasi', 'lunas', 'ditolak', 'minta_bukti_ulang', 'daftar_tunggu']
         && isValidString(data.rejectionReason, 0, 500)
@@ -198,6 +234,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'registrationId', 'registrationNumber', 'accessToken', 'programId',
+          'packageCode', 'packageName',
           'senderName', 'senderBank', 'transferDate', 'transferAmount',
           'proofFilePath', 'proofFileName', 'proofMimeType',
           'verificationStatus', 'verifiedBy', 'verifiedAt', 'rejectionReason',
@@ -208,6 +245,8 @@ service cloud.firestore {
         && isValidString(data.registrationNumber, 8, 40) && data.registrationNumber.matches('^SAKITA-[0-9]{4}-[0-9]{4,6}$')
         && isValidToken(data.accessToken)
         && isValidId(data.programId)
+        && (!('packageCode' in data) || data.packageCode in ['paket_hemat', 'paket_premium'])
+        && (!('packageName' in data) || isValidString(data.packageName, 3, 60))
         && isValidString(data.senderName, 2, 140)
         && isValidString(data.senderBank, 2, 100)
         && isValidString(data.transferDate, 8, 30)
@@ -458,6 +497,8 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isValidId(registrationId)
         && isValidRegistration(incoming())
+        && ('packageCode' in incoming())
+        && hasCanonicalPackageTuple(incoming())
         && incoming().id == registrationId
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
@@ -478,7 +519,7 @@ service cloud.firestore {
         && (
           isAdmin()
           || (
-            // Action: Participant submits transfer proof (cannot bypass to 'lunas', cannot overwrite terminal states)
+            // Action: Participant submits transfer proof (cannot bypass to 'lunas', cannot overwrite terminal states or package/price)
             existing().paymentStatus in ['belum_unggah', 'minta_bukti_ulang', 'ditolak']
             && existing().registrationStatus != 'cancelled'
             && incoming().paymentStatus == 'menunggu_verifikasi'
@@ -496,6 +537,8 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isValidToken(accessToken)
         && isValidRegistrationTicket(incoming())
+        && ('packageCode' in incoming())
+        && hasCanonicalPackageTuple(incoming())
         && incoming().accessToken == accessToken
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time

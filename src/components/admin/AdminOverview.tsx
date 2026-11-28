@@ -12,14 +12,17 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  BedDouble,
   CheckCircle2,
   Clock,
   FileWarning,
+  Layers,
   TrendingUp,
   Users,
   Wallet,
   XCircle,
 } from 'lucide-react';
+import { getParticipantPackageInfo } from '../../lib/defaults';
 import { computeRemainingSeats, formatRupiah, formatTimestampID, getPaymentStatusMeta } from '../../lib/format';
 import type { Payment, Program, Registration } from '../../types';
 
@@ -79,11 +82,19 @@ export function AdminOverview({
     const totalReserved = activePrograms.reduce((acc, p) => acc + p.reservedCount, 0);
     const sisaKuota = computeRemainingSeats(totalQuota, totalConfirmed, totalReserved);
 
+    const paketHematCount = activeRegs.filter((r) => r.packageCode === 'paket_hemat').length;
+    const paketPremiumCount = activeRegs.filter((r) => r.packageCode === 'paket_premium').length;
+    const legacyPackageCount = activeRegs.filter((r) => !r.packageCode).length;
+    const lodgingNeededCount = activeRegs.filter((r) => r.includesLodging === true).length;
+
+    const totalRegistrationValue = activeRegs.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+
     // Verified revenue strictly from payments verified as 'lunas' by admin
     const verifiedRevenue = filteredPayments
       .filter((p) => p.verificationStatus === 'lunas')
       .reduce((acc, p) => acc + Number(p.transferAmount || 0), 0);
 
+    const remainingPayment = Math.max(0, totalRegistrationValue - verifiedRevenue);
     const targetRevenue = activePrograms.reduce((acc, p) => acc + Number(p.targetRevenue || p.quota * p.price), 0) || 81000000;
 
     return {
@@ -94,7 +105,13 @@ export function AdminOverview({
       ditolak,
       sisaKuota,
       totalQuota,
+      paketHematCount,
+      paketPremiumCount,
+      legacyPackageCount,
+      lodgingNeededCount,
+      totalRegistrationValue,
       verifiedRevenue,
+      remainingPayment,
       targetRevenue,
     };
   }, [filteredRegs, filteredPayments, activePrograms]);
@@ -174,21 +191,70 @@ export function AdminOverview({
         })}
       </div>
 
+      {/* Package & Accommodation Summary */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Peserta Paket Hemat</span>
+            <Layers className="h-4 w-4 text-cyan-600" />
+          </div>
+          <p className="mt-2 font-mono text-2xl font-bold text-slate-900 tabular-nums">
+            {stats.paketHematCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">Rp1.950.000 · Tanpa fasilitas penginapan</p>
+        </div>
+
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-5">
+          <div className="flex items-center justify-between text-xs font-medium text-amber-800">
+            <span>Peserta Paket Premium</span>
+            <Layers className="h-4 w-4 text-amber-600" />
+          </div>
+          <p className="mt-2 font-mono text-2xl font-bold text-slate-900 tabular-nums">
+            {stats.paketPremiumCount}
+          </p>
+          <p className="mt-1 text-xs text-amber-900/75">Rp2.700.000 · Dengan fasilitas penginapan</p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Kebutuhan Penginapan Hotel</span>
+            <BedDouble className="h-4 w-4 text-indigo-600" />
+          </div>
+          <p className="mt-2 font-mono text-2xl font-bold text-indigo-700 tabular-nums">
+            {stats.lodgingNeededCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {stats.legacyPackageCount > 0
+              ? `Termasuk ${stats.legacyPackageCount} data lama tanpa kode paket`
+              : 'Peserta dengan fasilitas penginapan aktif'}
+          </p>
+        </div>
+      </div>
+
       {/* Revenue Progress Card */}
       <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <Wallet className="h-4 w-4 text-emerald-600" />
-              Total Pendapatan Terverifikasi (Lunas)
+              Total Pembayaran Terverifikasi (Lunas)
             </p>
-            <p className="mt-2 font-mono text-3xl font-bold text-slate-900 tabular-nums">
+            <p className="mt-2 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
               {formatRupiah(stats.verifiedRevenue)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-500">Total Nilai Pendaftaran</p>
+            <p className="mt-2 font-mono text-2xl font-bold text-slate-900 tabular-nums">
+              {formatRupiah(stats.totalRegistrationValue)}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Sisa pembayaran: <strong className="font-mono text-amber-700">{formatRupiah(stats.remainingPayment)}</strong>
             </p>
           </div>
           <div className="text-left sm:text-right">
             <p className="text-xs text-slate-500">Target Pendapatan Program</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-slate-700 tabular-nums">
+            <p className="mt-2 font-mono text-lg font-semibold text-slate-700 tabular-nums">
               {formatRupiah(stats.targetRevenue)} ({revenuePct}%)
             </p>
           </div>
@@ -200,7 +266,7 @@ export function AdminOverview({
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-          <span>Dihitung eksklusif dari pembayaran yang telah disetujui Lunas oleh admin.</span>
+          <span>Dihitung eksklusif dari pembayaran yang telah disetujui Lunas oleh admin. Kuota 30 kursi berlaku gabungan seluruh paket.</span>
           {stats.menunggu > 0 && (
             <button
               type="button"
@@ -324,6 +390,7 @@ export function AdminOverview({
                 <tr>
                   <th className="px-6 py-3">No. Registrasi</th>
                   <th className="px-4 py-3">Nama Peserta</th>
+                  <th className="px-4 py-3">Paket</th>
                   <th className="px-4 py-3">Lembaga</th>
                   <th className="px-4 py-3">Tanggal Daftar</th>
                   <th className="px-6 py-3 text-right">Status Pembayaran</th>
@@ -332,12 +399,29 @@ export function AdminOverview({
               <tbody className="divide-y divide-slate-200">
                 {recentRegs.map((reg) => {
                   const meta = getPaymentStatusMeta(reg.paymentStatus);
+                  const pkg = getParticipantPackageInfo(reg);
                   return (
                     <tr key={reg.id} className="hover:bg-slate-50/80">
                       <td className="px-6 py-3.5 font-mono text-xs font-semibold text-slate-900">
                         {reg.registrationNumber}
                       </td>
                       <td className="px-4 py-3.5 font-medium text-slate-900">{reg.fullName}</td>
+                      <td className="px-4 py-3.5 text-xs">
+                        <span
+                          className={`font-semibold ${
+                            pkg.code === 'paket_premium'
+                              ? 'text-amber-700'
+                              : pkg.code === 'paket_hemat'
+                                ? 'text-cyan-700'
+                                : 'text-slate-500'
+                          }`}
+                        >
+                          {pkg.label}
+                        </span>
+                        <span className="block text-[11px] text-slate-400">
+                          {pkg.lodgingShortLabel}
+                        </span>
+                      </td>
                       <td className="px-4 py-3.5 text-slate-600">{reg.institution}</td>
                       <td className="px-4 py-3.5 text-xs text-slate-500 tabular-nums">
                         {formatTimestampID(reg.createdAt)}

@@ -9,8 +9,112 @@ import type {
   TrainerProfile,
   TrainerSectionKey,
   TrainerSectionVisibility,
+  TrainingPackageCode,
+  TrainingPackageOption,
   WebsiteSettings,
 } from '../types';
+
+export const PACKAGE_LEARNING_BENEFITS: string[] = [
+  '4 hari pelatihan intensif',
+  '10 proyek aplikasi nyata',
+  'Belajar membuat aplikasi tanpa harus menguasai coding',
+  'Pengembangan keahlian AI untuk pendidikan dan bisnis',
+  'Peluang bisnis jasa pembuatan dan penjualan aplikasi',
+];
+
+export const TRAINING_PACKAGES: Record<TrainingPackageCode, TrainingPackageOption> = {
+  paket_hemat: {
+    code: 'paket_hemat',
+    name: 'Paket Hemat',
+    price: 1950000,
+    includesLodging: false,
+    lodgingShortLabel: 'Tanpa fasilitas penginapan',
+    lodgingDetailLabel: 'Tanpa fasilitas penginapan hotel (akomodasi diatur secara mandiri oleh peserta)',
+    highlightLabel: 'Hemat Rp750.000',
+    ctaLabel: 'Pilih Paket Hemat',
+    accent: 'cyan',
+    confirmedFacilities: [
+      'Makan selama pelatihan',
+      'Snack & coffee break',
+      'Modul pelatihan terstruktur',
+      'Pendampingan intensif selama pelatihan',
+      'Akses Komunitas Sekolah AI Kita (setelah verifikasi LUNAS)',
+    ],
+  },
+  paket_premium: {
+    code: 'paket_premium',
+    name: 'Paket Premium',
+    price: 2700000,
+    includesLodging: true,
+    lodgingShortLabel: 'Dengan fasilitas penginapan',
+    lodgingDetailLabel: 'Termasuk fasilitas penginapan di Hotel Grand Makmur, Jambi selama pelatihan',
+    highlightLabel: 'Kenyamanan lebih lengkap',
+    ctaLabel: 'Pilih Paket Premium',
+    accent: 'gold',
+    confirmedFacilities: [
+      'Menginap di Hotel Grand Makmur, Jambi selama pelatihan',
+      'Makan selama pelatihan',
+      'Snack & coffee break',
+      'Modul pelatihan terstruktur',
+      'Pendampingan intensif selama pelatihan',
+      'Akses Komunitas Sekolah AI Kita (setelah verifikasi LUNAS)',
+    ],
+  },
+};
+
+export const TRAINING_PACKAGE_LIST: TrainingPackageOption[] = [
+  TRAINING_PACKAGES.paket_hemat,
+  TRAINING_PACKAGES.paket_premium,
+];
+
+export function isValidTrainingPackageCode(value: unknown): value is TrainingPackageCode {
+  return value === 'paket_hemat' || value === 'paket_premium';
+}
+
+export function getTrainingPackageByCode(code?: string | null): TrainingPackageOption | null {
+  if (code === 'paket_hemat') return TRAINING_PACKAGES.paket_hemat;
+  if (code === 'paket_premium') return TRAINING_PACKAGES.paket_premium;
+  return null;
+}
+
+export function getParticipantPackageInfo(record: {
+  packageCode?: TrainingPackageCode;
+  packageName?: string;
+  includesLodging?: boolean;
+}): {
+  code: TrainingPackageCode | 'legacy';
+  label: string;
+  lodgingShortLabel: string;
+  lodgingDetailLabel: string;
+  isLegacy: boolean;
+} {
+  const matched = getTrainingPackageByCode(record.packageCode);
+  if (matched) {
+    return {
+      code: matched.code,
+      label: record.packageName?.trim() || matched.name,
+      lodgingShortLabel: matched.lodgingShortLabel,
+      lodgingDetailLabel: matched.lodgingDetailLabel,
+      isLegacy: false,
+    };
+  }
+  const hasExplicitLodging = typeof record.includesLodging === 'boolean';
+  return {
+    code: 'legacy',
+    label: record.packageName?.trim() || 'Data Lama (Belum Tercatat)',
+    lodgingShortLabel: hasExplicitLodging
+      ? record.includesLodging
+        ? 'Dengan penginapan'
+        : 'Tanpa penginapan'
+      : 'Belum Tercatat',
+    lodgingDetailLabel: hasExplicitLodging
+      ? record.includesLodging
+        ? 'Termasuk fasilitas penginapan di Hotel Grand Makmur, Jambi'
+        : 'Tanpa fasilitas penginapan hotel'
+      : 'Data pendaftaran sebelum skema pilihan paket diaktifkan (nominal asli tetap terjaga)',
+    isLegacy: true,
+  };
+}
 
 export const INITIAL_PROJECTS: ProjectItem[] = [
   {
@@ -109,7 +213,7 @@ export const INITIAL_FAQS: FaqItem[] = [
   {
     question: 'Apa saja yang termasuk dalam biaya pelatihan?',
     answer:
-      'Investasi Rp2.700.000 per peserta sudah mencakup menginap di Hotel Grand Makmur Jambi selama program, makan, snack, modul pelatihan, praktik 10 proyek aplikasi digital, pendampingan intensif 4 hari, serta akses Komunitas Sekolah AI Kita.',
+      'Tersedia dua pilihan paket dengan materi dan kualitas pembelajaran yang sama (4 hari pelatihan intensif, 10 proyek aplikasi nyata, modul pelatihan, makan & snack selama pelatihan, pendampingan intensif, serta akses Komunitas Sekolah AI Kita setelah verifikasi LUNAS): Paket Hemat Rp1.950.000 (tanpa fasilitas penginapan) dan Paket Premium Rp2.700.000 (termasuk fasilitas penginapan di Hotel Grand Makmur, Jambi).',
   },
   {
     question: 'Bagaimana cara mendaftar?',
@@ -289,15 +393,15 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   adminWhatsapp: OFFICIAL_SAKITA_WHATSAPP_RAW,
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
-    'Halo {{nama}},\n\nTerima kasih telah mendaftar di Sekolah AI Kita (SAKITA).\nNomor Registrasi: {{registrasi}}\nProgram: {{program}}\nStatus Pembayaran: Menunggu Verifikasi\n\nTim admin kami akan segera memverifikasi bukti pembayaran Anda. Setelah status pembayaran Anda terverifikasi LUNAS oleh admin, akses resmi Komunitas Sekolah AI Kita akan otomatis terbuka pada halaman status pendaftaran Anda.',
+    'Halo {{nama}},\n\nTerima kasih telah mendaftar di Sekolah AI Kita (SAKITA).\nNomor Registrasi: {{registrasi}}\nProgram: {{program}}\nPaket Pilihan: {{paket}} ({{penginapan}})\nNominal: {{nominal}}\nStatus Pembayaran: Menunggu Verifikasi\n\nTim admin kami akan segera memverifikasi bukti pembayaran Anda. Setelah status pembayaran Anda terverifikasi LUNAS oleh admin, akses resmi Komunitas Sekolah AI Kita akan otomatis terbuka pada halaman status pendaftaran Anda.',
   adminEmailSubject: 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA',
   adminEmailTemplate:
-    'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
+    'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPaket: {{paket}} ({{penginapan}})\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
   adminWhatsappTemplate:
-    '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
+    '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPaket: {{paket}} ({{penginapan}})\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
-    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} dengan nomor registrasi {{registrasi}} telah diverifikasi dan berstatus LUNAS.\n\nJadwal: {{tanggal}}\nLokasi: {{lokasi}}\n\nAkses Resmi Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nInformasi persiapan pelatihan akan terus kami sampaikan melalui Komunitas Sekolah AI Kita.',
+    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{paket}} — {{penginapan}}) dengan nomor registrasi {{registrasi}} telah diverifikasi dan berstatus LUNAS.\n\nJadwal: {{tanggal}}\nLokasi: {{lokasi}}\n\nAkses Resmi Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nInformasi persiapan pelatihan akan terus kami sampaikan melalui Komunitas Sekolah AI Kita.',
 };
 
 export const DEFAULT_TRAINER_SECTION_ORDER: TrainerSectionKey[] = [

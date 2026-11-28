@@ -42,11 +42,18 @@ import { HeroDashboardPreview } from '../components/landing/HeroDashboardPreview
 import { LegalModal } from '../components/landing/LegalModal';
 import { TrainerProfileSection } from '../components/landing/TrainerProfileSection';
 import { useToast } from '../context/ToastContext';
-import { DEFAULT_PRIMARY_TRAINER, DEFAULT_PROGRAM, DEFAULT_WEBSITE_SETTINGS } from '../lib/defaults';
+import {
+  DEFAULT_PRIMARY_TRAINER,
+  DEFAULT_PROGRAM,
+  DEFAULT_WEBSITE_SETTINGS,
+  PACKAGE_LEARNING_BENEFITS,
+  TRAINING_PACKAGES,
+  TRAINING_PACKAGE_LIST,
+} from '../lib/defaults';
 import { computeRemainingSeats, formatRupiah, toWhatsappLink } from '../lib/format';
 import { trackMetaContact, trackMetaViewContent } from '../lib/metaPixel';
 import { fetchPublicPrograms, fetchPublicTrainers, fetchWebsiteSettings } from '../lib/sakitaService';
-import type { Program, TrainerProfile, WebsiteSettings } from '../types';
+import type { Program, TrainerProfile, TrainingPackageCode, WebsiteSettings } from '../types';
 
 interface LandingPageProps {
   navigate: (path: string) => void;
@@ -241,7 +248,6 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
           icon: TARGET_AUDIENCE[idx % TARGET_AUDIENCE.length].icon,
         }))
       : TARGET_AUDIENCE;
-  const facilities = activeProgram.facilities?.length ? activeProgram.facilities : settings.facilities;
   const rawFaqs = settings.faqs?.length ? settings.faqs : DEFAULT_WEBSITE_SETTINGS.faqs;
   // Hide unanswered admin draft FAQs on public landing page until admin fills their answers
   const faqs = rawFaqs.filter(
@@ -295,9 +301,11 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
     }
   };
 
-  const goToRegister = (programId?: string) => {
+  const goToRegister = (programId?: string, packageCode?: TrainingPackageCode) => {
     const target = programId || activeProgram.id;
-    navigate(`/daftar?program=${encodeURIComponent(target)}`);
+    const params = new URLSearchParams({ program: target });
+    if (packageCode) params.set('paket', packageCode);
+    navigate(`/daftar?${params.toString()}`);
   };
 
   return (
@@ -427,22 +435,33 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                   {heroDescription}
                 </p>
 
-                <div className="mt-8 flex flex-wrap items-center gap-3.5">
-                  <button
-                    type="button"
-                    disabled={isProgramClosed}
-                    onClick={() => goToRegister()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#22D3EE] px-6 text-sm font-semibold text-[#080F1D] transition-all hover:bg-[#22D3EE]/90 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap shrink-0"
+                {/* Hero Investment Highlight */}
+                <div className="mt-6 max-w-xl rounded-xl border border-[#22D3EE]/30 bg-[#0F172A]/85 px-4 py-3.5">
+                  <p className="font-display text-sm font-bold text-[#F8FAFC] sm:text-base">
+                    Investasi Pelatihan Mulai{' '}
+                    <span className="font-mono text-[#22D3EE] tabular-nums">
+                      {formatRupiah(TRAINING_PACKAGES.paket_hemat.price)}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-[#94A3B8]">
+                    Tersedia pilihan paket dengan atau tanpa penginapan.
+                  </p>
+                </div>
+
+                <div className="mt-7 flex flex-wrap items-center gap-3.5">
+                  <a
+                    href="#fasilitas"
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#22D3EE] px-6 text-sm font-semibold text-[#080F1D] transition-all hover:bg-[#22D3EE]/90 whitespace-nowrap shrink-0"
                   >
                     <span>
                       {isProgramClosed
                         ? 'Pendaftaran Ditutup'
                         : isProgramFull
-                          ? 'Masuk Daftar Tunggu'
+                          ? 'Lihat Paket & Daftar Tunggu'
                           : 'Daftar Sekarang'}
                     </span>
                     {!isProgramClosed && <ArrowRight className="h-4 w-4" />}
-                  </button>
+                  </a>
                   <a
                     href="#program"
                     className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-700 bg-[#0F172A]/80 px-6 text-sm font-semibold text-[#F8FAFC] transition-colors hover:border-slate-500 hover:bg-[#0F172A] whitespace-nowrap shrink-0"
@@ -692,7 +711,7 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <span className="text-[#94A3B8]">Investasi</span>
                   <span className="font-mono font-semibold text-[#22D3EE] tabular-nums">
-                    {formatRupiah(activeProgram.price)}
+                    Mulai {formatRupiah(TRAINING_PACKAGES.paket_hemat.price)}
                   </span>
                 </div>
               </div>
@@ -1177,100 +1196,199 @@ export function LandingPage({ navigate, initialProgramSlug }: LandingPageProps) 
         </section>
 
         {/* ===================================================================
-            H. INVESTASI PENDIDIKAN & FASILITAS
+            H. INVESTASI PENDIDIKAN & PILIHAN PAKET PELATIHAN
            =================================================================== */}
         <section id="fasilitas" className="border-b border-slate-800/80 bg-[#0F172A]/40 py-20 lg:py-24">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
               <p className="text-xs font-medium tracking-wide text-[#22D3EE]">
-                Investasi Pendidikan & Fasilitas
+                Investasi Pendidikan & Pilihan Paket
               </p>
-              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl">
-                Satu Investasi untuk Kemandirian Digital Lembaga
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#F8FAFC] sm:text-4xl [text-wrap:balance]">
+                Investasi Terjangkau, Peluang Tak Terbatas.
               </h2>
+              <p className="mt-4 text-base leading-relaxed text-[#E2E8F0] sm:text-lg [text-wrap:balance]">
+                Mulai dari Rp1.950.000, kamu sudah bisa belajar membangun 10 aplikasi nyata dan
+                membuka peluang penghasilan baru di era AI.
+              </p>
+              <p className="mt-2.5 text-sm leading-relaxed text-[#94A3B8]">
+                Pilih paket yang sesuai dengan kebutuhanmu. Dua pilihan fasilitas, satu kualitas
+                pembelajaran.
+              </p>
             </div>
 
-            <div className="mt-12 rounded-2xl border border-[#22D3EE]/30 bg-[#0F172A] p-7 sm:p-10">
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-                <div className="flex flex-col justify-between lg:col-span-6 lg:border-r lg:border-slate-800 lg:pr-8">
-                  <div>
-                    <p className="text-xs font-medium text-[#94A3B8]">{activeProgram.name}</p>
-                    <div className="mt-4 flex items-baseline gap-2">
-                      <span className="font-mono text-4xl font-bold tracking-tight text-[#F8FAFC] tabular-nums sm:text-5xl">
-                        {formatRupiah(activeProgram.price)}
-                      </span>
-                      <span className="text-sm text-[#94A3B8]">/ peserta</span>
-                    </div>
-
-                    {/* General Registration Status (Live quota & payment counts are admin-only) */}
-                    <div className="mt-6 rounded-xl border border-slate-800 bg-[#080F1D] p-4">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#94A3B8]">Status Pendaftaran</span>
+            {/* Two Side-by-Side Responsive Pricing Cards */}
+            <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch">
+              {TRAINING_PACKAGE_LIST.map((pkg) => {
+                const isGold = pkg.accent === 'gold';
+                return (
+                  <article
+                    key={pkg.code}
+                    className={`relative flex flex-col justify-between rounded-2xl border p-7 transition-all sm:p-9 ${
+                      isGold
+                        ? 'border-[#D4AF37]/50 bg-gradient-to-b from-[#131C31] via-[#0F172A] to-[#080F1D] shadow-[0_24px_60px_-28px_rgba(212,175,55,0.28)]'
+                        : 'border-[#22D3EE]/40 bg-gradient-to-b from-[#0F172A] to-[#080F1D] shadow-[0_24px_60px_-28px_rgba(34,211,238,0.2)]'
+                    }`}
+                  >
+                    <div>
+                      {/* Card Header */}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p
+                            className={`font-mono text-xs font-semibold uppercase tracking-[0.14em] ${
+                              isGold ? 'text-[#D4AF37]' : 'text-[#22D3EE]'
+                            }`}
+                          >
+                            {pkg.name}
+                          </p>
+                          <p className="mt-1.5 text-sm font-medium text-[#E2E8F0]">
+                            {pkg.lodgingShortLabel}
+                          </p>
+                        </div>
                         <span
-                          className={`font-semibold ${
-                            isProgramClosed || isProgramFull ? 'text-amber-400' : 'text-[#10B981]'
+                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold ${
+                            isGold
+                              ? 'border-[#D4AF37]/45 bg-[#D4AF37]/12 text-[#EBD077]'
+                              : 'border-[#10B981]/45 bg-[#10B981]/12 text-[#34D399]'
                           }`}
                         >
+                          {pkg.highlightLabel}
+                        </span>
+                      </div>
+
+                      {/* Price Display */}
+                      <div className="mt-6 flex items-baseline gap-2 border-b border-slate-800/90 pb-6">
+                        <span
+                          className={`font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl ${
+                            isGold ? 'text-[#F8FAFC]' : 'text-[#F8FAFC]'
+                          }`}
+                        >
+                          {formatRupiah(pkg.price)}
+                        </span>
+                        <span className="text-sm text-[#94A3B8]">/ peserta</span>
+                      </div>
+
+                      {/* Lodging Clarity Box */}
+                      <div
+                        className={`mt-5 rounded-xl border px-4 py-3 text-xs leading-relaxed ${
+                          isGold
+                            ? 'border-[#D4AF37]/30 bg-[#D4AF37]/8 text-[#F5E6B3]'
+                            : 'border-slate-700/90 bg-[#080F1D]/80 text-[#CBD5E1]'
+                        }`}
+                      >
+                        <strong className={isGold ? 'text-[#EBD077]' : 'text-[#22D3EE]'}>
+                          Fasilitas Penginapan:{' '}
+                        </strong>
+                        {pkg.includesLodging
+                          ? 'Termasuk fasilitas penginapan di Hotel Grand Makmur, Jambi selama pelatihan.'
+                          : 'Paket ini tidak termasuk penginapan hotel. Peserta tetap mengikuti seluruh sesi dan materi yang sama secara penuh.'}
+                      </div>
+
+                      {/* Identical Core Curriculum & Learning Quality */}
+                      <div className="mt-6">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+                          Materi & Kualitas Pembelajaran (Sama di Kedua Paket)
+                        </h3>
+                        <ul className="mt-3.5 space-y-2.5">
+                          {PACKAGE_LEARNING_BENEFITS.map((item) => (
+                            <li key={item} className="flex items-start gap-2.5 text-sm text-[#F8FAFC]">
+                              <span
+                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
+                                  isGold
+                                    ? 'bg-[#D4AF37]/15 text-[#EBD077]'
+                                    : 'bg-[#22D3EE]/15 text-[#22D3EE]'
+                                }`}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Confirmed Facilities per Package */}
+                      <div className="mt-6 border-t border-slate-800/80 pt-5">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+                          Fasilitas Pelatihan yang Termasuk
+                        </h3>
+                        <ul className="mt-3.5 space-y-2.5">
+                          {pkg.confirmedFacilities.map((fac) => (
+                            <li key={fac} className="flex items-start gap-2.5 text-sm text-[#CBD5E1]">
+                              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#10B981]/15 text-[#10B981]">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                              <span>{fac}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Package CTA Button */}
+                    <div className="mt-8 border-t border-slate-800/80 pt-6">
+                      <button
+                        type="button"
+                        disabled={isProgramClosed}
+                        onClick={() => goToRegister(undefined, pkg.code)}
+                        className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                          isGold
+                            ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C55C] text-[#080F1D] hover:brightness-105'
+                            : 'bg-[#22D3EE] text-[#080F1D] hover:bg-[#22D3EE]/90'
+                        }`}
+                      >
+                        <span>
                           {isProgramClosed
                             ? 'Pendaftaran Ditutup'
                             : isProgramFull
-                              ? 'Pendaftaran Penuh (Daftar Tunggu)'
-                              : 'Pendaftaran Dibuka'}
+                              ? `${pkg.ctaLabel} (Daftar Tunggu)`
+                              : pkg.ctaLabel}
                         </span>
-                      </div>
-                      <p className="mt-2.5 text-[11px] leading-relaxed text-[#94A3B8]">
-                        Kelas eksklusif dengan kuota terbatas maksimal {activeProgram.quota} peserta.
-                        Informasi ketersediaan dan verifikasi peserta dikelola langsung oleh admin SAKITA.
+                        {!isProgramClosed && <ArrowRight className="h-4 w-4" />}
+                      </button>
+                      <p className="mt-2.5 text-center text-[11px] text-[#94A3B8]">
+                        Nominal pembayaran otomatis disesuaikan ke {formatRupiah(pkg.price)} pada formulir pendaftaran
                       </p>
                     </div>
-                  </div>
+                  </article>
+                );
+              })}
+            </div>
 
-                  <div className="mt-8">
-                    <button
-                      type="button"
-                      disabled={isProgramClosed}
-                      onClick={() => goToRegister()}
-                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#22D3EE] px-6 text-sm font-semibold text-[#080F1D] transition-colors hover:bg-[#22D3EE]/90 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <span>
-                        {isProgramClosed
-                          ? 'Pendaftaran Ditutup'
-                          : isProgramFull
-                            ? 'Daftar Tunggu Tanpa Transfer'
-                            : 'Amankan Kursi Anda'}
-                      </span>
-                      {!isProgramClosed && <ArrowRight className="h-4 w-4" />}
-                    </button>
-                    <p className="mt-3 text-center text-xs text-[#94A3B8]">
-                      Pembayaran melalui transfer bank langsung · Verifikasi resmi oleh admin SAKITA
-                    </p>
-                  </div>
+            {/* Shared Quota & Persuasive Reassurance Strip */}
+            <div className="mt-8 rounded-2xl border border-slate-800 bg-[#0F172A]/90 p-6 sm:p-7">
+              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+                <div className="max-w-2xl">
+                  <p className="font-display text-base font-semibold text-[#F8FAFC] sm:text-lg">
+                    “Jangan biarkan keterbatasan biaya menghalangi langkahmu untuk menguasai teknologi masa depan.”
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-[#94A3B8]">
+                    Kuota terbatas maksimal <strong className="text-[#F8FAFC]">{activeProgram.quota} peserta keseluruhan</strong>{' '}
+                    (gabungan Paket Hemat dan Paket Premium) · {activeProgram.dateLabel} · {activeProgram.location}.
+                  </p>
                 </div>
-
-                {/* Facilities Checklist */}
-                <div className="lg:col-span-6">
-                  <h3 className="font-display text-lg font-semibold text-[#F8FAFC]">
-                    Fasilitas Lengkap yang Anda Dapatkan
-                  </h3>
-                  <ul className="mt-5 space-y-3.5">
-                    {facilities.map((fac) => (
-                      <li key={fac} className="flex items-start gap-3 text-sm text-[#F8FAFC]">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#10B981]/15 text-[#10B981]">
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                        <span>{fac}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-7 flex items-start gap-3 rounded-xl border border-slate-800 bg-[#080F1D]/70 p-4 text-xs leading-relaxed text-[#94A3B8]">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
-                    <span>
-                      Akses resmi Komunitas Sekolah AI Kita terbuka otomatis pada halaman status
-                      pendaftaran Anda setelah pembayaran diverifikasi <strong>LUNAS</strong> oleh
-                      admin SAKITA.
-                    </span>
-                  </div>
+                <div className="shrink-0 rounded-xl border border-slate-800 bg-[#080F1D] px-4 py-3 text-left md:text-right">
+                  <p className="text-[11px] text-[#94A3B8]">Status Pendaftaran</p>
+                  <p
+                    className={`mt-0.5 text-xs font-semibold ${
+                      isProgramClosed || isProgramFull ? 'text-amber-400' : 'text-[#10B981]'
+                    }`}
+                  >
+                    {isProgramClosed
+                      ? 'Pendaftaran Ditutup'
+                      : isProgramFull
+                        ? 'Pendaftaran Penuh (Daftar Tunggu)'
+                        : 'Pendaftaran Dibuka · Kuota Terbatas'}
+                  </p>
                 </div>
+              </div>
+              <div className="mt-5 flex items-start gap-3 border-t border-slate-800/80 pt-4 text-xs leading-relaxed text-[#94A3B8]">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#22D3EE]" />
+                <span>
+                  Pembayaran melalui transfer bank langsung dan diverifikasi resmi oleh admin SAKITA.
+                  Akses resmi Komunitas Sekolah AI Kita terbuka otomatis pada halaman status
+                  pendaftaran Anda setelah pembayaran diverifikasi <strong>LUNAS</strong>.
+                </span>
               </div>
             </div>
 

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { getParticipantPackageInfo } from '../../lib/defaults';
 import {
   formatRupiah,
   formatTimestampID,
@@ -23,7 +24,7 @@ import {
   toWhatsappLink,
 } from '../../lib/format';
 import { cancelRegistrationAction, updateParticipantDetails } from '../../lib/sakitaService';
-import type { PaymentStatus, Program, Registration } from '../../types';
+import type { PaymentStatus, Program, Registration, TrainingPackageCode } from '../../types';
 
 interface AdminParticipantsProps {
   programs: Program[];
@@ -36,6 +37,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [programFilter, setProgramFilter] = useState('all');
+  const [packageFilter, setPackageFilter] = useState<'all' | TrainingPackageCode | 'legacy'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all');
   const [sortField, setSortField] = useState<'createdAt' | 'fullName' | 'registrationNumber'>('createdAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -60,8 +62,16 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
     const q = search.trim().toLowerCase();
     const list = registrations.filter((r) => {
       if (programFilter !== 'all' && r.programId !== programFilter) return false;
+      if (packageFilter === 'legacy' && r.packageCode) return false;
+      if (
+        (packageFilter === 'paket_hemat' || packageFilter === 'paket_premium') &&
+        r.packageCode !== packageFilter
+      ) {
+        return false;
+      }
       if (statusFilter !== 'all' && r.paymentStatus !== statusFilter) return false;
       if (!q) return true;
+      const pkg = getParticipantPackageInfo(r);
       return (
         r.registrationNumber.toLowerCase().includes(q) ||
         r.fullName.toLowerCase().includes(q) ||
@@ -69,7 +79,8 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
         r.email.toLowerCase().includes(q) ||
         r.whatsapp.includes(q) ||
         r.city.toLowerCase().includes(q) ||
-        r.province.toLowerCase().includes(q)
+        r.province.toLowerCase().includes(q) ||
+        pkg.label.toLowerCase().includes(q)
       );
     });
 
@@ -87,7 +98,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return list;
-  }, [registrations, search, programFilter, statusFilter, sortField, sortDir]);
+  }, [registrations, search, programFilter, packageFilter, statusFilter, sortField, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -103,23 +114,29 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
   };
 
   const buildExportRows = () =>
-    filtered.map((r, idx) => ({
-      No: idx + 1,
-      'Nomor Registrasi': r.registrationNumber,
-      'Nama Lengkap': r.fullName,
-      'Jenis Kelamin': r.gender,
-      WhatsApp: formatWhatsappDisplay(r.whatsapp),
-      Email: r.email,
-      'Nama Lembaga': r.institution,
-      Jabatan: r.position,
-      'Kabupaten/Kota': r.city,
-      Provinsi: r.province,
-      Program: r.programName,
-      Nominal: r.amount,
-      'Tanggal Mendaftar': formatTimestampID(r.createdAt),
-      'Status Pendaftaran': getRegistrationStatusLabel(r.registrationStatus),
-      'Status Pembayaran': getPaymentStatusMeta(r.paymentStatus).label,
-    }));
+    filtered.map((r, idx) => {
+      const pkg = getParticipantPackageInfo(r);
+      return {
+        No: idx + 1,
+        'Nomor Registrasi': r.registrationNumber,
+        'Nama Lengkap': r.fullName,
+        'Jenis Kelamin': r.gender,
+        WhatsApp: formatWhatsappDisplay(r.whatsapp),
+        Email: r.email,
+        'Nama Lembaga': r.institution,
+        Jabatan: r.position,
+        'Kabupaten/Kota': r.city,
+        Provinsi: r.province,
+        Program: r.programName,
+        'Kode Paket': r.packageCode || 'data_lama',
+        'Nama Paket': pkg.label,
+        'Fasilitas Penginapan': pkg.lodgingDetailLabel,
+        Nominal: r.amount,
+        'Tanggal Mendaftar': formatTimestampID(r.createdAt),
+        'Status Pendaftaran': getRegistrationStatusLabel(r.registrationStatus),
+        'Status Pembayaran': getPaymentStatusMeta(r.paymentStatus).label,
+      };
+    });
 
   const handleExportExcel = () => {
     const rows = buildExportRows();
@@ -242,7 +259,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
 
       {/* Filters Bar */}
       <div className="no-print grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-12">
-        <div className="relative sm:col-span-5">
+        <div className="relative sm:col-span-4">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -251,7 +268,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Cari nama, no. registrasi, lembaga, email, kota..."
+            placeholder="Cari nama, no. registrasi, paket, lembaga, kota..."
             className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
           />
         </div>
@@ -261,7 +278,8 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
             setProgramFilter(e.target.value);
             setPage(1);
           }}
-          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 sm:col-span-4 focus:border-slate-900 focus:outline-none"
+          aria-label="Filter program"
+          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 sm:col-span-3 focus:border-slate-900 focus:outline-none"
         >
           <option value="all">Semua Program</option>
           {programs.map((p) => (
@@ -271,11 +289,26 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
           ))}
         </select>
         <select
+          value={packageFilter}
+          onChange={(e) => {
+            setPackageFilter(e.target.value as 'all' | TrainingPackageCode | 'legacy');
+            setPage(1);
+          }}
+          aria-label="Filter paket"
+          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 sm:col-span-2 focus:border-slate-900 focus:outline-none"
+        >
+          <option value="all">Semua Paket</option>
+          <option value="paket_hemat">Paket Hemat</option>
+          <option value="paket_premium">Paket Premium</option>
+          <option value="legacy">Data Lama</option>
+        </select>
+        <select
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value as 'all' | PaymentStatus);
             setPage(1);
           }}
+          aria-label="Filter status pembayaran"
           className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 sm:col-span-3 focus:border-slate-900 focus:outline-none"
         >
           <option value="all">Semua Status Pembayaran</option>
@@ -322,6 +355,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
                 <th className="px-3 py-3">Jabatan</th>
                 <th className="px-3 py-3">Kab/Kota</th>
                 <th className="px-3 py-3">Provinsi</th>
+                <th className="px-3 py-3">Paket & Penginapan</th>
                 <th className="px-3 py-3">
                   <button
                     type="button"
@@ -339,7 +373,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
             <tbody className="divide-y divide-slate-200 text-slate-700">
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-6 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={14} className="px-6 py-12 text-center text-sm text-slate-500">
                     Tidak ada data peserta yang sesuai dengan filter saat ini.
                   </td>
                 </tr>
@@ -347,6 +381,7 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
                 paginated.map((r, index) => {
                   const rowNum = (safePage - 1) * PAGE_SIZE + index + 1;
                   const statusMeta = getPaymentStatusMeta(r.paymentStatus);
+                  const pkg = getParticipantPackageInfo(r);
                   const isCancelled = r.registrationStatus === 'cancelled';
                   return (
                     <tr key={r.id} className={`hover:bg-slate-50 ${isCancelled ? 'opacity-60' : ''}`}>
@@ -373,6 +408,22 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
                       <td className="px-3 py-3">{r.position}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{r.city}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{r.province}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span
+                          className={`font-semibold ${
+                            pkg.code === 'paket_premium'
+                              ? 'text-amber-700'
+                              : pkg.code === 'paket_hemat'
+                                ? 'text-cyan-700'
+                                : 'text-slate-500'
+                          }`}
+                        >
+                          {pkg.label}
+                        </span>
+                        <span className="block text-[11px] text-slate-500">
+                          {pkg.lodgingShortLabel} · {formatRupiah(r.amount)}
+                        </span>
+                      </td>
                       <td className="px-3 py-3 whitespace-nowrap tabular-nums text-slate-500">
                         {formatTimestampID(r.createdAt)}
                       </td>
@@ -496,6 +547,18 @@ export function AdminParticipants({ programs, registrations }: AdminParticipants
               <div>
                 <dt className="text-xs text-slate-500">Program</dt>
                 <dd className="font-medium text-slate-900">{detailTarget.programName}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Paket Pilihan</dt>
+                <dd className="font-semibold text-slate-900">
+                  {getParticipantPackageInfo(detailTarget).label}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Fasilitas Penginapan</dt>
+                <dd className="font-medium text-slate-900">
+                  {getParticipantPackageInfo(detailTarget).lodgingDetailLabel}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Nominal Biaya</dt>

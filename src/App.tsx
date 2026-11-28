@@ -79,11 +79,13 @@ function AppRouter() {
   if (pathname === '/daftar') {
     const programParam = url.searchParams.get('program') || undefined;
     const tokenParam = url.searchParams.get('token') || undefined;
+    const paketParam = url.searchParams.get('paket') || undefined;
     return (
       <Suspense fallback={<PageLoader />}>
         <RegisterPage
           navigate={navigate}
           initialProgramId={programParam}
+          initialPackageCode={paketParam}
           resumeToken={tokenParam}
         />
       </Suspense>

@@ -120,6 +120,36 @@ function writeJsonFile(filePath: string, data: unknown): void {
 const DEFAULT_COMMUNITY_INVITE_URL = 'https://chat.whatsapp.com/JSmbDkfooS1EadYZ6ngfXx';
 const DEFAULT_ADMIN_WHATSAPP = '6285121634560';
 
+type ServerTrainingPackageCode = 'paket_hemat' | 'paket_premium';
+
+interface ServerTrainingPackage {
+  packageCode: ServerTrainingPackageCode;
+  packageName: 'Paket Hemat' | 'Paket Premium';
+  packagePrice: 1950000 | 2700000;
+  includesLodging: boolean;
+}
+
+const SERVER_TRAINING_PACKAGES: Record<ServerTrainingPackageCode, ServerTrainingPackage> = {
+  paket_hemat: {
+    packageCode: 'paket_hemat',
+    packageName: 'Paket Hemat',
+    packagePrice: 1950000,
+    includesLodging: false,
+  },
+  paket_premium: {
+    packageCode: 'paket_premium',
+    packageName: 'Paket Premium',
+    packagePrice: 2700000,
+    includesLodging: true,
+  },
+};
+
+function resolveServerTrainingPackage(code: unknown): ServerTrainingPackage | null {
+  if (code === 'paket_hemat') return SERVER_TRAINING_PACKAGES.paket_hemat;
+  if (code === 'paket_premium') return SERVER_TRAINING_PACKAGES.paket_premium;
+  return null;
+}
+
 let communityGate: CommunityGateConfig = readJsonFile<CommunityGateConfig>(COMMUNITY_FILE, {
   communityName: 'Komunitas Sekolah AI Kita (SAKITA)',
   whatsappInviteUrl: process.env.COMMUNITY_WHATSAPP_LINK || DEFAULT_COMMUNITY_INVITE_URL,
@@ -143,15 +173,15 @@ let notifRuntimeConfig: NotifRuntimeConfig = readJsonFile<NotifRuntimeConfig>(NO
   adminWhatsapp: DEFAULT_ADMIN_WHATSAPP,
   participantEmailSubject: 'Pendaftaran Berhasil - Sekolah AI Kita',
   participantEmailTemplate:
-    'Halo {{nama}},\n\nTerima kasih! Pendaftaran Anda pada program {{program}} dengan nomor registrasi {{registrasi}} dan bukti transfer telah kami terima.\nStatus saat ini: Menunggu Verifikasi.\n\nAkses Komunitas Sekolah AI Kita akan otomatis terbuka di halaman status pendaftaran Anda setelah pembayaran diverifikasi LUNAS oleh admin SAKITA.\n\nSalam hangat,\nTim Sekolah AI Kita (SAKITA)',
+    'Halo {{nama}},\n\nTerima kasih! Pendaftaran Anda pada program {{program}} ({{paket}} — {{penginapan}}) dengan nomor registrasi {{registrasi}} dan bukti transfer sebesar {{nominal}} telah kami terima.\nStatus saat ini: Menunggu Verifikasi.\n\nAkses Komunitas Sekolah AI Kita akan otomatis terbuka di halaman status pendaftaran Anda setelah pembayaran diverifikasi LUNAS oleh admin SAKITA.\n\nSalam hangat,\nTim Sekolah AI Kita (SAKITA)',
   adminEmailSubject: 'Bukti Transfer Masuk — Perlu Verifikasi SAKITA',
   adminEmailTemplate:
-    'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
+    'Peserta baru telah mengunggah bukti transfer dan menunggu verifikasi Anda.\n\nNomor Registrasi: {{registrasi}}\nNama Peserta: {{nama}}\nLembaga: {{lembaga}} ({{jabatan}})\nProgram: {{program}}\nPaket: {{paket}} ({{penginapan}})\nPengirim: {{pengirim}} ({{bank}})\nTanggal Transfer: {{tanggal_transfer}}\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSegera verifikasi di Dashboard Admin:\n{{dashboard}}',
   adminWhatsappTemplate:
-    '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
+    '*BUKTI TRANSFER MASUK — SAKITA*\n\nNo. Reg: {{registrasi}}\nPeserta: {{nama}}\nLembaga: {{lembaga}}\nProgram: {{program}}\nPaket: {{paket}} ({{penginapan}})\nPengirim: {{pengirim}} ({{bank}})\nNominal: {{nominal}}\nStatus: Menunggu Verifikasi\n\nSilakan cek & verifikasi di Dashboard Admin:\n{{dashboard}}',
   verifiedEmailSubject: 'Pembayaran Terverifikasi (LUNAS) - Sekolah AI Kita',
   verifiedEmailTemplate:
-    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{registrasi}}) telah diverifikasi dan berstatus LUNAS.\n\nTanggal: {{tanggal}}\nLokasi: {{lokasi}}\n\nAkses Resmi Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nSilakan persiapkan laptop pribadi dan ikuti informasi teknis di Komunitas Sekolah AI Kita.\n\nSampai jumpa di Jambi!\nTim SAKITA',
+    'Halo {{nama}},\n\nPembayaran Anda untuk program {{program}} ({{paket}} — {{penginapan}}, No. Reg: {{registrasi}}) telah diverifikasi dan berstatus LUNAS.\n\nTanggal: {{tanggal}}\nLokasi: {{lokasi}}\n\nAkses Resmi Komunitas Sekolah AI Kita:\n{{komunitas}}\n\nSilakan persiapkan laptop pribadi dan ikuti informasi teknis di Komunitas Sekolah AI Kita.\n\nSampai jumpa di Jambi!\nTim SAKITA',
 });
 
 if (['085769427335', '6285769427335'].includes((notifRuntimeConfig.adminWhatsapp || '').replace(/\D/g, ''))) {
@@ -521,9 +551,9 @@ async function startServer() {
     });
   });
 
-  // 2. Server-side Registration Initialization (rate-limited, validates & generates secure tokens)
+  // 2. Server-side Registration Initialization (rate-limited, validates package & derives canonical price)
   app.post('/api/registration/init', rateLimit('reg_init', 20, 15 * 60 * 1000), (req, res) => {
-    const { fullName, whatsapp, email } = req.body as Record<string, unknown>;
+    const { fullName, whatsapp, email, packageCode } = req.body as Record<string, unknown>;
     if (typeof fullName !== 'string' || fullName.trim().length < 2 || fullName.trim().length > 140) {
       res.status(400).json({ error: 'Nama lengkap wajib diisi (2–140 karakter).' });
       return;
@@ -542,6 +572,15 @@ async function startServer() {
       return;
     }
 
+    // Strict server-side package validation — never trust any price submitted by the client
+    const resolvedPackage = resolveServerTrainingPackage(packageCode);
+    if (!resolvedPackage) {
+      res.status(400).json({
+        error: 'Pilihan paket pelatihan tidak valid. Silakan pilih Paket Hemat atau Paket Premium.',
+      });
+      return;
+    }
+
     const registrationId = `reg_${crypto.randomBytes(12).toString('hex')}`;
     const accessToken = crypto.randomBytes(24).toString('hex'); // 48-char unguessable token
 
@@ -549,6 +588,10 @@ async function startServer() {
       registrationId,
       accessToken,
       normalizedWhatsapp: normalizedWa,
+      packageCode: resolvedPackage.packageCode,
+      packageName: resolvedPackage.packageName,
+      packagePrice: resolvedPackage.packagePrice,
+      includesLodging: resolvedPackage.includesLodging,
       issuedAt: new Date().toISOString(),
     });
   });
@@ -799,6 +842,8 @@ async function startServer() {
       institution,
       position,
       programName,
+      packageName,
+      includesLodging,
       amount,
       senderName,
       senderBank,
@@ -823,12 +868,21 @@ async function startServer() {
     const communityStatusNote =
       'Tersedia otomatis pada halaman status pendaftaran Anda setelah pembayaran diverifikasi LUNAS oleh admin SAKITA.';
 
+    const lodgingText =
+      typeof includesLodging === 'boolean'
+        ? includesLodging
+          ? 'Dengan fasilitas penginapan'
+          : 'Tanpa fasilitas penginapan'
+        : 'Sesuai paket terdaftar';
+
     const vars: Record<string, string> = {
       nama: String(fullName).slice(0, 140),
       lembaga: String(institution || '-').slice(0, 180),
       jabatan: String(position || '-').slice(0, 120),
       registrasi: String(registrationNumber).slice(0, 40),
       program: String(programName || 'Kelas Intensif AI untuk Pengelolaan Sekolah & Pesantren').slice(0, 180),
+      paket: String(packageName || 'Paket Pelatihan SAKITA').slice(0, 80),
+      penginapan: lodgingText,
       nominal: formatRupiahServer(Number(amount || 0)),
       pengirim: String(senderName || fullName).slice(0, 140),
       bank: String(senderBank || '-').slice(0, 100),
@@ -904,6 +958,8 @@ async function startServer() {
       fullName,
       email,
       programName,
+      packageName,
+      includesLodging,
       dateLabel,
       location,
     } = req.body as Record<string, unknown>;
@@ -934,10 +990,19 @@ async function startServer() {
         ? communityGate.whatsappInviteUrl
         : 'Silakan buka halaman status e-tiket Anda atau hubungi admin SAKITA melalui WhatsApp resmi.';
 
+    const lodgingText =
+      typeof includesLodging === 'boolean'
+        ? includesLodging
+          ? 'Dengan fasilitas penginapan'
+          : 'Tanpa fasilitas penginapan'
+        : 'Sesuai paket terdaftar';
+
     const vars: Record<string, string> = {
       nama: String(fullName),
       registrasi: String(registrationNumber),
       program: String(programName || ''),
+      paket: String(packageName || 'Paket Pelatihan SAKITA').slice(0, 80),
+      penginapan: lodgingText,
       tanggal: String(dateLabel || '28–31 Desember 2026'),
       lokasi: String(location || 'Hotel Grand Makmur, Jambi'),
       komunitas: verifiedCommunityLink,
