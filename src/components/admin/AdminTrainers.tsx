@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -155,33 +155,64 @@ function moveItem<T>(list: T[], from: number, to: number): T[] {
   return copy;
 }
 
+function formatTrainerError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : '';
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) as { error?: string; path?: string; operationType?: string };
+    const inner = (parsed.error || '').toLowerCase();
+    const loc = parsed.path ? ` (${parsed.operationType || 'write'} ${parsed.path})` : '';
+    if (inner.includes('permission') || inner.includes('insufficient')) {
+      return `Izin penulisan ke database ditolak${loc}. Pastikan Anda login dengan akun admin terverifikasi lalu muat ulang halaman.`;
+    }
+    if (inner.includes('quota')) {
+      return 'Kuota harian database tercapai. Silakan coba lagi besok atau periksa kuota Firebase.';
+    }
+    if (parsed.error) return `${parsed.error}${loc}`;
+  } catch {
+    // Plain error message
+  }
+  return raw;
+}
+
 export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
   const { toast } = useToast();
   const effectiveList = trainers.length > 0 ? trainers : [DEFAULT_PRIMARY_TRAINER];
 
   const [selectedId, setSelectedId] = useState<string>(effectiveList[0].id);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
-  const [draft, setDraft] = useState<TrainerProfile>(effectiveList[0]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [draft, setRawDraft] = useState<TrainerProfile>(effectiveList[0]);
   const [activeTab, setActiveTab] = useState<EditorTab>('identitas');
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingPortfolioId, setUploadingPortfolioId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const setDraft = useCallback(
+    (updater: TrainerProfile | ((prev: TrainerProfile) => TrainerProfile)) => {
+      setIsDirty(true);
+      setRawDraft(updater);
+    },
+    [],
+  );
 
   useEffect(() => {
-    if (isCreatingNew) return;
+    if (isCreatingNew || isDirty) return;
     const found = effectiveList.find((t) => t.id === selectedId) || effectiveList[0];
     if (found) {
       setSelectedId(found.id);
-      setDraft(found);
+      setRawDraft(found);
     }
-  }, [trainers, selectedId, isCreatingNew]);
+  }, [trainers, selectedId, isCreatingNew, isDirty]);
 
   const handleSelectTrainer = (trainer: TrainerProfile) => {
     setIsCreatingNew(false);
+    setIsDirty(false);
     setSelectedId(trainer.id);
-    setDraft(trainer);
+    setRawDraft(trainer);
     setShowPreview(false);
   };
 
@@ -189,8 +220,9 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
     const nextOrder = effectiveList.length + 1;
     const blank = createBlankTrainer(nextOrder);
     setIsCreatingNew(true);
+    setIsDirty(true);
     setSelectedId(blank.id);
-    setDraft(blank);
+    setRawDraft(blank);
     setActiveTab('identitas');
     setShowPreview(false);
   };
@@ -202,22 +234,22 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
       return;
     }
 
+    setActionError(null);
     setSaving(true);
     try {
       const existsInDb = trainers.some((t) => t.id === draft.id);
       await saveTrainerProfile(draft, isCreatingNew && !existsInDb, trainers);
       setIsCreatingNew(false);
+      setIsDirty(false);
       toast(
         'success',
         'Profil Pemateri Tersimpan',
         `Perubahan untuk ${draft.fullName} telah disimpan permanen ke database.`,
       );
     } catch (err) {
-      toast(
-        'error',
-        'Gagal Menyimpan Profil Pemateri',
-        err instanceof Error ? err.message : 'Terjadi kesalahan saat menyimpan ke Firestore.',
-      );
+      const msg = formatTrainerError(err, 'Terjadi kesalahan saat menyimpan ke Firestore.');
+      setActionError(msg);
+      toast('error', 'Gagal Menyimpan Profil Pemateri', msg);
     } finally {
       setSaving(false);
     }
@@ -246,37 +278,57 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
       toast(
         'error',
         'Gagal menghapus pemateri',
-        err instanceof Error ? err.message : 'Terjadi kesalahan saat menghapus data.',
+        formatTrainerError(err, 'Terjadi kesalahan saat menghapus data.'),
       );
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleUploadTrainerPhoto = async (file: File | null) => {
+  const handleUploadTrainerPhoto = async (file: File | null, inputEl?: HTMLInputElement | null) => {
     if (!file) return;
+    setActionError(null);
     setUploadingPhoto(true);
     try {
       const url = await uploadAdminAsset(file);
-      setDraft((prev) => ({ ...prev, photoUrl: url }));
-      toast(
-        'success',
-        'Foto pemateri berhasil diunggah',
-        'Klik "Simpan & Publikasikan" untuk menyimpan perubahan secara permanen.',
-      );
+      const updatedDraft: TrainerProfile = { ...draft, photoUrl: url };
+      setRawDraft(updatedDraft);
+
+      // Auto-persist immediately for existing trainers with valid name so photo is live right away
+      if (!isCreatingNew && updatedDraft.fullName.trim().length >= 2) {
+        const existsInDb = trainers.some((t) => t.id === updatedDraft.id);
+        await saveTrainerProfile(updatedDraft, !existsInDb, trainers);
+        setIsDirty(false);
+        toast(
+          'success',
+          'Foto pemateri berhasil diunggah & disimpan',
+          'Foto asli pemateri kini langsung tampil di halaman utama SAKITA.',
+        );
+      } else {
+        setIsDirty(true);
+        toast(
+          'success',
+          'Foto pemateri berhasil diunggah',
+          'Lengkapi nama pemateri lalu klik "Simpan & Publikasikan".',
+        );
+      }
     } catch (err) {
-      toast(
-        'error',
-        'Gagal mengunggah foto pemateri',
-        err instanceof Error ? err.message : 'Pastikan format JPG/PNG/WEBP maksimal 5 MB.',
-      );
+      const msg = formatTrainerError(err, 'Pastikan format JPG/PNG/WEBP maksimal 15 MB.');
+      setActionError(msg);
+      toast('error', 'Gagal mengunggah foto pemateri', msg);
     } finally {
       setUploadingPhoto(false);
+      if (inputEl) inputEl.value = '';
     }
   };
 
-  const handleUploadPortfolioScreenshot = async (portfolioId: string, file: File | null) => {
+  const handleUploadPortfolioScreenshot = async (
+    portfolioId: string,
+    file: File | null,
+    inputEl?: HTMLInputElement | null,
+  ) => {
     if (!file) return;
+    setActionError(null);
     setUploadingPortfolioId(portfolioId);
     try {
       const url = await uploadAdminAsset(file);
@@ -288,13 +340,12 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
       }));
       toast('success', 'Screenshot portofolio diunggah', 'Klik "Simpan & Publikasikan" untuk menyimpan.');
     } catch (err) {
-      toast(
-        'error',
-        'Gagal mengunggah screenshot',
-        err instanceof Error ? err.message : 'Pastikan format JPG/PNG/WEBP maksimal 5 MB.',
-      );
+      const msg = formatTrainerError(err, 'Pastikan format JPG/PNG/WEBP maksimal 15 MB.');
+      setActionError(msg);
+      toast('error', 'Gagal mengunggah screenshot', msg);
     } finally {
       setUploadingPortfolioId(null);
+      if (inputEl) inputEl.value = '';
     }
   };
 
@@ -358,6 +409,23 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
           </button>
         </div>
       </div>
+
+      {actionError && (
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          <div>
+            <p className="font-bold text-rose-900">Terjadi Kendala Saat Memproses Data Pemateri</p>
+            <p className="mt-0.5 leading-relaxed">{actionError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Tutup pesan error"
+            className="rounded-md p-1 text-rose-600 hover:bg-rose-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Multi-Trainer Selector Strip */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -487,9 +555,9 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">Foto Profesional Pemateri</h3>
                     <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                      Unggah foto asli pemateri (JPG, PNG, atau WEBP maks. 5 MB). Gambar disimpan
-                      permanen di Firebase sehingga langsung tampil optimal di domain{' '}
-                      <strong>sekolahaikita.my.id</strong> (Vercel) tanpa mengubah wajah asli.
+                      Unggah foto asli pemateri (JPG, PNG, atau WEBP maks. 15 MB). Foto otomatis
+                      dioptimasi lalu disimpan permanen di Firebase agar langsung tampil di{' '}
+                      <strong>sekolahaikita.my.id</strong> tanpa mengubah wajah asli.
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -506,9 +574,9 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
                           className="hidden"
                           disabled={uploadingPhoto}
                           onChange={(e) => {
-                            const file = e.target.files?.[0] || null;
-                            e.target.value = '';
-                            void handleUploadTrainerPhoto(file);
+                            const inputEl = e.currentTarget;
+                            const file = inputEl.files?.[0] || null;
+                            void handleUploadTrainerPhoto(file, inputEl);
                           }}
                         />
                       </label>
@@ -1188,9 +1256,9 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
                               className="hidden"
                               disabled={uploadingPortfolioId === item.id}
                               onChange={(e) => {
-                                const file = e.target.files?.[0] || null;
-                                e.target.value = '';
-                                void handleUploadPortfolioScreenshot(item.id, file);
+                                const inputEl = e.currentTarget;
+                                const file = inputEl.files?.[0] || null;
+                                void handleUploadPortfolioScreenshot(item.id, file, inputEl);
                               }}
                             />
                           </label>

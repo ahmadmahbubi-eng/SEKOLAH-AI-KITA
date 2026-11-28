@@ -40,7 +40,9 @@ service cloud.firestore {
     }
 
     function isBootstrapAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'ahmadmahbubi@gmail.com';
+      return isVerifiedUser()
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'ahmadmahbubi@gmail.com';
     }
 
     function isAdmin() {
@@ -442,8 +444,7 @@ service cloud.firestore {
         && isValidId(data.id) && data.id.size() >= 12
         && isValidString(data.fileName, 1, 200)
         && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
-        && isValidString(data.dataUrl, 20, 900000)
-        && data.dataUrl.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        && isValidString(data.dataUrl, 24, 900000)
         && isValidId(data.uploadedByUid)
         && data.createdAt is timestamp;
     }
@@ -708,7 +709,7 @@ service cloud.firestore {
 
     // 12. Trainers (Public read for published profiles, full RBAC CRUD for Admin)
     match /trainers/{trainerId} {
-      allow get: if isValidId(trainerId) && (isAdmin() || existing().isPublished == true);
+      allow get: if isValidId(trainerId) && (isAdmin() || (resource != null && resource.data.isPublished == true));
       allow list: if isAdmin() || resource.data.isPublished == true;
       allow create: if isValidId(trainerId)
         && isAdmin()

@@ -87,6 +87,19 @@ export function isSafeImageUrl(raw: string): boolean {
 
 const publicAssetObjectUrlCache = new Map<string, string>();
 
+function dataUrlToBlobUrl(dataUrl: string, fallbackMime = 'image/jpeg'): string {
+  const [header, base64] = dataUrl.split(',');
+  if (!header || !base64) return '';
+  const mimeMatch = header.match(/data:([^;]+);base64/i);
+  const mimeType = mimeMatch?.[1] || fallbackMime;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+}
+
 export async function resolvePublicAssetUrl(rawUrl: string): Promise<string> {
   const trimmed = (rawUrl || '').trim();
   if (!trimmed || !isSafeImageUrl(trimmed)) return '';
@@ -102,15 +115,8 @@ export async function resolvePublicAssetUrl(rawUrl: string): Promise<string> {
   if (!payload.dataUrl || !payload.dataUrl.includes(',')) return '';
   if (!/^data:image\/(jpeg|png|webp);base64,/i.test(payload.dataUrl)) return '';
 
-  const [header, base64] = payload.dataUrl.split(',');
-  const mimeMatch = header.match(/data:([^;]+);base64/i);
-  const mimeType = mimeMatch?.[1] || payload.mimeType || 'image/jpeg';
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  const blobUrl = dataUrlToBlobUrl(payload.dataUrl, payload.mimeType || 'image/jpeg');
+  if (!blobUrl) return '';
   publicAssetObjectUrlCache.set(trimmed, blobUrl);
   return blobUrl;
 }
@@ -122,10 +128,10 @@ function readFileAsDataUrl(file: File): Promise<string> {
       if (typeof reader.result === 'string') {
         resolve(reader.result);
       } else {
-        reject(new Error('Gagal membaca file bukti transfer.'));
+        reject(new Error('Gagal membaca file gambar.'));
       }
     };
-    reader.onerror = () => reject(new Error('Gagal membaca file bukti transfer.'));
+    reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
     reader.readAsDataURL(file);
   });
 }
@@ -161,7 +167,7 @@ function compressImageDataUrl(
       ctx.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
-    img.onerror = () => reject(new Error('File gambar bukti transfer tidak dapat diproses.'));
+    img.onerror = () => reject(new Error('File gambar tidak dapat diproses. Pastikan file tidak rusak.'));
     img.src = rawDataUrl;
   });
 }
@@ -1726,12 +1732,16 @@ export async function saveTrainerProfile(
     handleFirestoreError(error, isNew ? OperationType.CREATE : OperationType.UPDATE, `trainers/${cleanId}`);
   }
 
-  await logAdminAudit(
-    isNew ? 'TAMBAH_PEMATERI' : 'UPDATE_PEMATERI',
-    'trainer',
-    cleanId,
-    `${isNew ? 'Menambahkan' : 'Memperbarui'} profil pemateri "${payload.fullName}" (Utama: ${payload.isPrimary ? 'Ya' : 'Tidak'}, Publik: ${payload.isPublished ? 'Ya' : 'Draft'}).`,
-  );
+  try {
+    await logAdminAudit(
+      isNew ? 'TAMBAH_PEMATERI' : 'UPDATE_PEMATERI',
+      'trainer',
+      cleanId,
+      `${isNew ? 'Menambahkan' : 'Memperbarui'} profil pemateri "${payload.fullName}" (Utama: ${payload.isPrimary ? 'Ya' : 'Tidak'}, Publik: ${payload.isPublished ? 'Ya' : 'Draft'}).`,
+    );
+  } catch (auditErr) {
+    console.warn('Non-fatal audit log error after trainer save:', auditErr);
+  }
 }
 
 export async function deleteTrainerProfile(trainer: TrainerProfile): Promise<void> {
@@ -1741,12 +1751,16 @@ export async function deleteTrainerProfile(trainer: TrainerProfile): Promise<voi
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
-  await logAdminAudit(
-    'HAPUS_PEMATERI',
-    'trainer',
-    trainer.id,
-    `Menghapus profil pemateri "${trainer.fullName}".`,
-  );
+  try {
+    await logAdminAudit(
+      'HAPUS_PEMATERI',
+      'trainer',
+      trainer.id,
+      `Menghapus profil pemateri "${trainer.fullName}".`,
+    );
+  } catch (auditErr) {
+    console.warn('Non-fatal audit log error after trainer delete:', auditErr);
+  }
 }
 
 export async function uploadAdminAsset(file: File): Promise<string> {
@@ -1759,8 +1773,8 @@ export async function uploadAdminAsset(file: File): Promise<string> {
   if (!isJpg && !isPng && !isWebp) {
     throw new Error('Format gambar tidak didukung. Gunakan JPG, PNG, atau WEBP.');
   }
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('Ukuran gambar melebihi batas maksimal 5 MB.');
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error('Ukuran gambar melebihi batas maksimal 15 MB.');
   }
 
   const user = auth.currentUser;
@@ -1768,35 +1782,52 @@ export async function uploadAdminAsset(file: File): Promise<string> {
     throw new Error('Sesi admin tidak aktif. Silakan login kembali.');
   }
 
-  let dataUrl = await readFileAsDataUrl(file);
+  const validPrefixPattern = /^data:(image\/(?:jpeg|png|webp));base64,/;
+  let dataUrl = '';
   let finalMime: 'image/jpeg' | 'image/png' | 'image/webp' = isPng
     ? 'image/png'
     : isWebp
       ? 'image/webp'
       : 'image/jpeg';
 
-  const strictAssetDataUrlPattern = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
-  const attempts: Array<{ maxDim: number; quality: number }> = [
-    { maxDim: 1400, quality: 0.9 },
-    { maxDim: 1200, quality: 0.84 },
-    { maxDim: 960, quality: 0.76 },
-  ];
-
-  for (const step of attempts) {
-    if (dataUrl.length <= 820_000 && strictAssetDataUrlPattern.test(dataUrl)) {
-      break;
+  // Keep small files (< 450KB) lossless when already in a valid image format
+  if (file.size <= 450 * 1024) {
+    const raw = await readFileAsDataUrl(file);
+    if (raw.length <= 650_000 && validPrefixPattern.test(raw)) {
+      dataUrl = raw;
     }
-    dataUrl = await compressImageDataUrl(dataUrl, step.maxDim, step.quality);
-    finalMime = 'image/jpeg';
   }
 
-  const headerMimeMatch = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,[A-Za-z0-9+/=]+$/);
+  // Otherwise decode once via object URL (low mobile RAM) and compress crisply under 650KB
+  if (!dataUrl) {
+    const tempObjectUrl = URL.createObjectURL(file);
+    try {
+      const attempts: Array<{ maxDim: number; quality: number }> = [
+        { maxDim: 1200, quality: 0.86 },
+        { maxDim: 960, quality: 0.78 },
+        { maxDim: 800, quality: 0.7 },
+        { maxDim: 680, quality: 0.6 },
+        { maxDim: 560, quality: 0.55 },
+      ];
+      for (const step of attempts) {
+        dataUrl = await compressImageDataUrl(tempObjectUrl, step.maxDim, step.quality);
+        finalMime = 'image/jpeg';
+        if (dataUrl.length <= 650_000) {
+          break;
+        }
+      }
+    } finally {
+      URL.revokeObjectURL(tempObjectUrl);
+    }
+  }
+
+  const headerMimeMatch = dataUrl.match(validPrefixPattern);
   if (!headerMimeMatch) {
     throw new Error('Format file gambar tidak valid setelah pemrosesan.');
   }
   finalMime = headerMimeMatch[1] as 'image/jpeg' | 'image/png' | 'image/webp';
 
-  if (dataUrl.length > 880_000) {
+  if (dataUrl.length > 860_000) {
     throw new Error('Ukuran gambar masih terlalu besar setelah optimasi. Gunakan gambar beresolusi lebih ringkas.');
   }
 
@@ -1815,7 +1846,12 @@ export async function uploadAdminAsset(file: File): Promise<string> {
     handleFirestoreError(error, OperationType.CREATE, `public_assets/${assetId}`);
   }
 
-  return `firestore-asset:${assetId}`;
+  const assetRef = `firestore-asset:${assetId}`;
+  const previewBlobUrl = dataUrlToBlobUrl(dataUrl, finalMime);
+  if (previewBlobUrl) {
+    publicAssetObjectUrlCache.set(assetRef, previewBlobUrl);
+  }
+  return assetRef;
 }
 
 export async function sendTestAdminNotification(): Promise<{
