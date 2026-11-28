@@ -278,6 +278,9 @@ export const DEFAULT_TRAINER_SECTION_VISIBILITY: TrainerSectionVisibility = {
   cta: true,
 };
 
+export const OFFICIAL_PRIMARY_TRAINER_PHOTO =
+  '/assets/aistudio/AHMAD_MAHBUBI._AN_3c173a30.jpg';
+
 export const DEFAULT_PRIMARY_TRAINER: TrainerProfile = {
   id: 'ahmad-mahbubi-an',
   isPrimary: true,
@@ -290,7 +293,7 @@ export const DEFAULT_PRIMARY_TRAINER: TrainerProfile = {
   titlePrimary: 'AI Practitioner & Education Innovator',
   titleSecondary: 'Founder Sekolah AI Kita (SAKITA)',
   pillarsLabel: 'Education • Technology • Innovation',
-  photoUrl: '',
+  photoUrl: OFFICIAL_PRIMARY_TRAINER_PHOTO,
   headline: 'Dari Dunia Pendidikan Menuju Inovasi Digital.',
   subheadline:
     'Mengintegrasikan pengalaman dunia pendidikan, kepemimpinan, dan kecerdasan buatan untuk menciptakan solusi digital yang nyata dan membuka peluang baru di era AI.',

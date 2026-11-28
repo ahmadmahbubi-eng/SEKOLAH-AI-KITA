@@ -23,6 +23,7 @@ import {
   DEFAULT_TRAINER_SECTION_VISIBILITY,
   DEFAULT_WEBSITE_SETTINGS,
   OFFICIAL_HOTEL_GALLERY,
+  OFFICIAL_PRIMARY_TRAINER_PHOTO,
 } from './defaults';
 import type {
   AdminUserRecord,
@@ -354,32 +355,66 @@ export async function fetchPublicPrograms(): Promise<Program[]> {
   }
 }
 
-export function normalizeTrainerProfile(raw: Partial<TrainerProfile>, id: string): TrainerProfile {
-  const base = id === DEFAULT_PRIMARY_TRAINER.id ? DEFAULT_PRIMARY_TRAINER : DEFAULT_PRIMARY_TRAINER;
+export function normalizeTrainerProfile(rawInput: unknown, id: string): TrainerProfile {
+  const raw = (rawInput && typeof rawInput === 'object' ? rawInput : {}) as Record<string, unknown>;
+  const profileMap =
+    raw.profile && typeof raw.profile === 'object'
+      ? (raw.profile as Record<string, unknown>)
+      : {};
+  const contentMap =
+    raw.content && typeof raw.content === 'object'
+      ? (raw.content as Record<string, unknown>)
+      : {};
+  const layoutMap =
+    raw.layout && typeof raw.layout === 'object'
+      ? (raw.layout as Record<string, unknown>)
+      : {};
+
+  // Merge legacy flat fields with new grouped maps (profile, content, layout)
+  const mergedRaw: Partial<TrainerProfile> = {
+    ...(raw as Partial<TrainerProfile>),
+    ...(profileMap as Partial<TrainerProfile>),
+    ...(contentMap as Partial<TrainerProfile>),
+    ...(layoutMap as Partial<TrainerProfile>),
+  };
+
+  const base = DEFAULT_PRIMARY_TRAINER;
   const validKeys = new Set<TrainerSectionKey>(DEFAULT_TRAINER_SECTION_ORDER);
-  const rawOrder = Array.isArray(raw.sectionOrder) ? raw.sectionOrder : DEFAULT_TRAINER_SECTION_ORDER;
+  const rawOrder = Array.isArray(mergedRaw.sectionOrder)
+    ? mergedRaw.sectionOrder
+    : DEFAULT_TRAINER_SECTION_ORDER;
   const dedupedOrder = rawOrder.filter((k): k is TrainerSectionKey => validKeys.has(k));
   const mergedOrder = [
     ...dedupedOrder,
     ...DEFAULT_TRAINER_SECTION_ORDER.filter((k) => !dedupedOrder.includes(k)),
   ];
 
+  const rawPhotoUrl = typeof mergedRaw.photoUrl === 'string' ? mergedRaw.photoUrl.trim() : '';
+  const resolvedPhotoUrl =
+    rawPhotoUrl || (id === DEFAULT_PRIMARY_TRAINER.id ? OFFICIAL_PRIMARY_TRAINER_PHOTO : '');
+
   return {
     ...base,
-    ...raw,
+    ...mergedRaw,
     id,
-    isPrimary: typeof raw.isPrimary === 'boolean' ? raw.isPrimary : id === DEFAULT_PRIMARY_TRAINER.id,
-    isPublished: typeof raw.isPublished === 'boolean' ? raw.isPublished : true,
-    displayOrder: typeof raw.displayOrder === 'number' ? raw.displayOrder : 1,
-    expertise: Array.isArray(raw.expertise) ? raw.expertise : base.expertise,
-    background: Array.isArray(raw.background) ? raw.background : base.background,
-    tools: Array.isArray(raw.tools) ? raw.tools : base.tools,
-    portfolio: Array.isArray(raw.portfolio) ? raw.portfolio : [],
-    whyLearnPoints: Array.isArray(raw.whyLearnPoints) ? raw.whyLearnPoints : base.whyLearnPoints,
-    sloganLines: Array.isArray(raw.sloganLines) ? raw.sloganLines : base.sloganLines,
+    photoUrl: resolvedPhotoUrl,
+    isPrimary:
+      typeof mergedRaw.isPrimary === 'boolean'
+        ? mergedRaw.isPrimary
+        : id === DEFAULT_PRIMARY_TRAINER.id,
+    isPublished: typeof mergedRaw.isPublished === 'boolean' ? mergedRaw.isPublished : true,
+    displayOrder: typeof mergedRaw.displayOrder === 'number' ? mergedRaw.displayOrder : 1,
+    expertise: Array.isArray(mergedRaw.expertise) ? mergedRaw.expertise : base.expertise,
+    background: Array.isArray(mergedRaw.background) ? mergedRaw.background : base.background,
+    tools: Array.isArray(mergedRaw.tools) ? mergedRaw.tools : base.tools,
+    portfolio: Array.isArray(mergedRaw.portfolio) ? mergedRaw.portfolio : [],
+    whyLearnPoints: Array.isArray(mergedRaw.whyLearnPoints)
+      ? mergedRaw.whyLearnPoints
+      : base.whyLearnPoints,
+    sloganLines: Array.isArray(mergedRaw.sloganLines) ? mergedRaw.sloganLines : base.sloganLines,
     sectionVisibility: {
       ...DEFAULT_TRAINER_SECTION_VISIBILITY,
-      ...(raw.sectionVisibility || {}),
+      ...(mergedRaw.sectionVisibility || {}),
     },
     sectionOrder: mergedOrder,
   };
@@ -1010,19 +1045,33 @@ export async function bootstrapAdminEnvironment(): Promise<void> {
     handleFirestoreError(error, OperationType.WRITE, `programs/${DEFAULT_PROGRAM.id}`);
   }
 
-  // Ensure default primary trainer profile exists in Firestore
+  // Ensure default primary trainer profile exists in Firestore using compact 11-key schema
   const trainerRef = doc(db, 'trainers', DEFAULT_PRIMARY_TRAINER.id);
   try {
     const trainerSnap = await getDoc(trainerRef);
     if (!trainerSnap.exists()) {
+      const seedDoc = buildTrainerFirestorePayload(DEFAULT_PRIMARY_TRAINER);
       await setDoc(trainerRef, {
-        ...DEFAULT_PRIMARY_TRAINER,
+        ...seedDoc,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+    } else {
+      const rawTrainer = trainerSnap.data() as Record<string, unknown>;
+      const hasLegacyFlatShape = !rawTrainer.profile || !rawTrainer.content || !rawTrainer.layout;
+      const missingPhoto = !String(rawTrainer.photoUrl || '').trim();
+      if (hasLegacyFlatShape || missingPhoto) {
+        const normalized = normalizeTrainerProfile(rawTrainer, DEFAULT_PRIMARY_TRAINER.id);
+        const migrated = buildTrainerFirestorePayload(normalized);
+        await setDoc(trainerRef, {
+          ...migrated,
+          createdAt: rawTrainer.createdAt ?? serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `trainers/${DEFAULT_PRIMARY_TRAINER.id}`);
+    console.warn('Non-fatal trainer bootstrap warning:', error);
   }
 
   // Ensure default settings docs exist
@@ -1545,11 +1594,7 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
   );
 }
 
-export async function saveTrainerProfile(
-  trainer: TrainerProfile,
-  isNew: boolean,
-  allTrainers?: TrainerProfile[],
-): Promise<void> {
+function buildTrainerFirestorePayload(trainer: TrainerProfile) {
   const cleanId = trainer.id
     .trim()
     .toLowerCase()
@@ -1648,46 +1693,62 @@ export async function saveTrainerProfile(
     cta: Boolean(trainer.sectionVisibility?.cta ?? true),
   };
 
-  const payload = {
+  return {
+    id: cleanId,
     isPrimary: Boolean(trainer.isPrimary),
     isPublished: Boolean(trainer.isPublished),
     displayOrder: Math.max(0, Math.min(1000, Math.round(Number(trainer.displayOrder) || 1))),
-    eyebrow: (trainer.eyebrow || '').trim().slice(0, 80),
-    sectionSubtitle: (trainer.sectionSubtitle || '').trim().slice(0, 160),
-    roleBadge: (trainer.roleBadge || '').trim().slice(0, 60),
     fullName,
-    titlePrimary: (trainer.titlePrimary || '').trim().slice(0, 180),
-    titleSecondary: (trainer.titleSecondary || '').trim().slice(0, 180),
-    pillarsLabel: (trainer.pillarsLabel || '').trim().slice(0, 180),
     photoUrl: rawPhoto,
-    headline: (trainer.headline || '').trim().slice(0, 240),
-    subheadline: (trainer.subheadline || '').trim().slice(0, 500),
-    bio: (trainer.bio || '').trim().slice(0, 6000),
-    expertiseTitle: (trainer.expertiseTitle || '').trim().slice(0, 120),
-    expertiseSubtitle: (trainer.expertiseSubtitle || '').trim().slice(0, 180),
-    expertise: cleanExpertise,
-    backgroundTitle: (trainer.backgroundTitle || '').trim().slice(0, 120),
-    backgroundSubtitle: (trainer.backgroundSubtitle || '').trim().slice(0, 180),
-    background: cleanBackground,
-    toolsTitle: (trainer.toolsTitle || '').trim().slice(0, 140),
-    toolsDisclaimer: (trainer.toolsDisclaimer || '').trim().slice(0, 500),
-    tools: cleanTools,
-    portfolioTitle: (trainer.portfolioTitle || '').trim().slice(0, 140),
-    portfolioSubtitle: (trainer.portfolioSubtitle || '').trim().slice(0, 200),
-    portfolio: cleanPortfolio,
-    whyLearnTitle: (trainer.whyLearnTitle || '').trim().slice(0, 180),
-    whyLearnPoints: cleanWhyLearnPoints,
-    whyLearnNarrative: (trainer.whyLearnNarrative || '').trim().slice(0, 1000),
-    personalStatement: (trainer.personalStatement || '').trim().slice(0, 1200),
-    personalStatementAuthor: (trainer.personalStatementAuthor || '').trim().slice(0, 160),
-    sloganLines: cleanSloganLines,
-    sloganEnglish: (trainer.sloganEnglish || '').trim().slice(0, 180),
-    ctaHeadline: (trainer.ctaHeadline || '').trim().slice(0, 240),
-    ctaSubheadline: (trainer.ctaSubheadline || '').trim().slice(0, 400),
-    ctaButtonLabel: (trainer.ctaButtonLabel || '').trim().slice(0, 100),
-    sectionVisibility: cleanVisibility,
-    sectionOrder: cleanSectionOrder,
+    profile: {
+      eyebrow: (trainer.eyebrow || '').trim().slice(0, 80),
+      sectionSubtitle: (trainer.sectionSubtitle || '').trim().slice(0, 160),
+      roleBadge: (trainer.roleBadge || '').trim().slice(0, 60),
+      titlePrimary: (trainer.titlePrimary || '').trim().slice(0, 180),
+      titleSecondary: (trainer.titleSecondary || '').trim().slice(0, 180),
+      pillarsLabel: (trainer.pillarsLabel || '').trim().slice(0, 180),
+      headline: (trainer.headline || '').trim().slice(0, 240),
+      subheadline: (trainer.subheadline || '').trim().slice(0, 500),
+      bio: (trainer.bio || '').trim().slice(0, 6000),
+      expertiseTitle: (trainer.expertiseTitle || '').trim().slice(0, 120),
+      expertiseSubtitle: (trainer.expertiseSubtitle || '').trim().slice(0, 180),
+      backgroundTitle: (trainer.backgroundTitle || '').trim().slice(0, 120),
+      backgroundSubtitle: (trainer.backgroundSubtitle || '').trim().slice(0, 180),
+      toolsTitle: (trainer.toolsTitle || '').trim().slice(0, 140),
+      toolsDisclaimer: (trainer.toolsDisclaimer || '').trim().slice(0, 500),
+      portfolioTitle: (trainer.portfolioTitle || '').trim().slice(0, 140),
+      portfolioSubtitle: (trainer.portfolioSubtitle || '').trim().slice(0, 200),
+      whyLearnTitle: (trainer.whyLearnTitle || '').trim().slice(0, 180),
+      whyLearnNarrative: (trainer.whyLearnNarrative || '').trim().slice(0, 1000),
+      personalStatement: (trainer.personalStatement || '').trim().slice(0, 1200),
+      personalStatementAuthor: (trainer.personalStatementAuthor || '').trim().slice(0, 160),
+      sloganEnglish: (trainer.sloganEnglish || '').trim().slice(0, 180),
+      ctaHeadline: (trainer.ctaHeadline || '').trim().slice(0, 240),
+      ctaSubheadline: (trainer.ctaSubheadline || '').trim().slice(0, 400),
+      ctaButtonLabel: (trainer.ctaButtonLabel || '').trim().slice(0, 100),
+    },
+    content: {
+      expertise: cleanExpertise,
+      background: cleanBackground,
+      tools: cleanTools,
+      portfolio: cleanPortfolio,
+      whyLearnPoints: cleanWhyLearnPoints,
+      sloganLines: cleanSloganLines,
+    },
+    layout: {
+      sectionVisibility: cleanVisibility,
+      sectionOrder: cleanSectionOrder,
+    },
   };
+}
+
+export async function saveTrainerProfile(
+  trainer: TrainerProfile,
+  isNew: boolean,
+  allTrainers?: TrainerProfile[],
+): Promise<void> {
+  const serialized = buildTrainerFirestorePayload(trainer);
+  const cleanId = serialized.id;
 
   const ref = doc(db, 'trainers', cleanId);
   let actualOp: OperationType = isNew ? OperationType.CREATE : OperationType.UPDATE;
@@ -1696,30 +1757,37 @@ export async function saveTrainerProfile(
     if (!existingSnap.exists()) {
       actualOp = OperationType.CREATE;
       await setDoc(ref, {
-        id: cleanId,
-        ...payload,
+        ...serialized,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     } else {
       actualOp = OperationType.UPDATE;
-      await updateDoc(ref, {
-        ...payload,
+      const existingData = existingSnap.data() as Record<string, unknown>;
+      await setDoc(ref, {
+        ...serialized,
+        createdAt: existingData.createdAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     }
 
-    if (payload.isPrimary && allTrainers && allTrainers.length > 0) {
+    if (serialized.isPrimary && allTrainers && allTrainers.length > 0) {
       const othersToDemote = allTrainers.filter(
         (other) => other.id !== cleanId && other.isPrimary,
       );
       await Promise.all(
-        othersToDemote.map((other) =>
-          updateDoc(doc(db, 'trainers', other.id), {
-            isPrimary: false,
+        othersToDemote.map(async (other) => {
+          const otherRef = doc(db, 'trainers', other.id);
+          const otherSnap = await getDoc(otherRef);
+          if (!otherSnap.exists()) return;
+          const otherExisting = otherSnap.data() as Record<string, unknown>;
+          const demoted = buildTrainerFirestorePayload({ ...other, isPrimary: false });
+          await setDoc(otherRef, {
+            ...demoted,
+            createdAt: otherExisting.createdAt ?? serverTimestamp(),
             updatedAt: serverTimestamp(),
-          }),
-        ),
+          });
+        }),
       );
     }
   } catch (error) {
@@ -1731,7 +1799,7 @@ export async function saveTrainerProfile(
       isNew ? 'TAMBAH_PEMATERI' : 'UPDATE_PEMATERI',
       'trainer',
       cleanId,
-      `${isNew ? 'Menambahkan' : 'Memperbarui'} profil pemateri "${payload.fullName}" (Utama: ${payload.isPrimary ? 'Ya' : 'Tidak'}, Publik: ${payload.isPublished ? 'Ya' : 'Draft'}).`,
+      `${isNew ? 'Menambahkan' : 'Memperbarui'} profil pemateri "${serialized.fullName}" (Utama: ${serialized.isPrimary ? 'Ya' : 'Tidak'}, Publik: ${serialized.isPublished ? 'Ya' : 'Draft'}).`,
     );
   } catch (auditErr) {
     console.warn('Non-fatal audit log error after trainer save:', auditErr);

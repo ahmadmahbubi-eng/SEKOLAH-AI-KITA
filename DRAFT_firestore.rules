@@ -357,110 +357,28 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
-    function isValidTrainerCore(data) {
-      return isValidId(data.id) && data.id.size() >= 3 && data.id.size() <= 100
+    function isValidTrainer(data) {
+      return data.keys().hasAll([
+          'id', 'isPrimary', 'isPublished', 'displayOrder',
+          'fullName', 'photoUrl', 'profile', 'content', 'layout',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'isPrimary', 'isPublished', 'displayOrder',
+          'fullName', 'photoUrl', 'profile', 'content', 'layout',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id.size() >= 3 && data.id.size() <= 100
         && data.isPrimary is bool
         && data.isPublished is bool
         && data.displayOrder is number && data.displayOrder >= 0 && data.displayOrder <= 1000
         && isValidString(data.fullName, 2, 160)
         && isValidString(data.photoUrl, 0, 500)
+        && data.profile is map && data.profile.size() <= 30
+        && data.content is map && data.content.size() <= 10
+        && data.layout is map && data.layout.size() <= 5
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
-    }
-
-    function isValidTrainerIdentityTexts(data) {
-      return isValidString(data.eyebrow, 0, 80)
-        && isValidString(data.sectionSubtitle, 0, 160)
-        && isValidString(data.roleBadge, 0, 60)
-        && isValidString(data.titlePrimary, 0, 180)
-        && isValidString(data.titleSecondary, 0, 180)
-        && isValidString(data.pillarsLabel, 0, 180)
-        && isValidString(data.headline, 0, 240)
-        && isValidString(data.subheadline, 0, 500)
-        && isValidString(data.bio, 0, 6000);
-    }
-
-    function isValidTrainerSectionTexts(data) {
-      return isValidString(data.expertiseTitle, 0, 120)
-        && isValidString(data.expertiseSubtitle, 0, 180)
-        && isValidString(data.backgroundTitle, 0, 120)
-        && isValidString(data.backgroundSubtitle, 0, 180)
-        && isValidString(data.toolsTitle, 0, 140)
-        && isValidString(data.toolsDisclaimer, 0, 500)
-        && isValidString(data.portfolioTitle, 0, 140)
-        && isValidString(data.portfolioSubtitle, 0, 200)
-        && isValidString(data.whyLearnTitle, 0, 180);
-    }
-
-    function isValidTrainerClosingTexts(data) {
-      return isValidString(data.whyLearnNarrative, 0, 1000)
-        && isValidString(data.personalStatement, 0, 1200)
-        && isValidString(data.personalStatementAuthor, 0, 160)
-        && isValidString(data.sloganEnglish, 0, 180)
-        && isValidString(data.ctaHeadline, 0, 240)
-        && isValidString(data.ctaSubheadline, 0, 400)
-        && isValidString(data.ctaButtonLabel, 0, 100);
-    }
-
-    function isValidTrainerLists(data) {
-      return data.expertise is list && data.expertise.size() <= 20
-        && (data.expertise.size() == 0 || data.expertise[0] is map)
-        && data.background is list && data.background.size() <= 25
-        && (data.background.size() == 0 || data.background[0] is string)
-        && data.tools is list && data.tools.size() <= 20
-        && (data.tools.size() == 0 || data.tools[0] is string)
-        && data.portfolio is list && data.portfolio.size() <= 20
-        && (data.portfolio.size() == 0 || data.portfolio[0] is map);
-    }
-
-    function isValidTrainerLayout(data) {
-      return data.whyLearnPoints is list && data.whyLearnPoints.size() <= 10
-        && (data.whyLearnPoints.size() == 0 || data.whyLearnPoints[0] is string)
-        && data.sloganLines is list && data.sloganLines.size() <= 6
-        && (data.sloganLines.size() == 0 || data.sloganLines[0] is string)
-        && data.sectionVisibility is map
-        && data.sectionOrder is list && data.sectionOrder.size() <= 10
-        && (data.sectionOrder.size() == 0 || data.sectionOrder[0] is string);
-    }
-
-    function isValidTrainer(data) {
-      let keys = data.keys();
-      return keys.hasAll([
-          'id', 'isPrimary', 'isPublished', 'displayOrder',
-          'eyebrow', 'sectionSubtitle', 'roleBadge', 'fullName',
-          'titlePrimary', 'titleSecondary', 'pillarsLabel', 'photoUrl',
-          'headline', 'subheadline', 'bio',
-          'expertiseTitle', 'expertiseSubtitle', 'expertise',
-          'backgroundTitle', 'backgroundSubtitle', 'background',
-          'toolsTitle', 'toolsDisclaimer', 'tools',
-          'portfolioTitle', 'portfolioSubtitle', 'portfolio',
-          'whyLearnTitle', 'whyLearnPoints', 'whyLearnNarrative',
-          'personalStatement', 'personalStatementAuthor',
-          'sloganLines', 'sloganEnglish',
-          'ctaHeadline', 'ctaSubheadline', 'ctaButtonLabel',
-          'sectionVisibility', 'sectionOrder', 'createdAt', 'updatedAt'
-        ])
-        && keys.hasOnly([
-          'id', 'isPrimary', 'isPublished', 'displayOrder',
-          'eyebrow', 'sectionSubtitle', 'roleBadge', 'fullName',
-          'titlePrimary', 'titleSecondary', 'pillarsLabel', 'photoUrl',
-          'headline', 'subheadline', 'bio',
-          'expertiseTitle', 'expertiseSubtitle', 'expertise',
-          'backgroundTitle', 'backgroundSubtitle', 'background',
-          'toolsTitle', 'toolsDisclaimer', 'tools',
-          'portfolioTitle', 'portfolioSubtitle', 'portfolio',
-          'whyLearnTitle', 'whyLearnPoints', 'whyLearnNarrative',
-          'personalStatement', 'personalStatementAuthor',
-          'sloganLines', 'sloganEnglish',
-          'ctaHeadline', 'ctaSubheadline', 'ctaButtonLabel',
-          'sectionVisibility', 'sectionOrder', 'createdAt', 'updatedAt'
-        ])
-        && isValidTrainerCore(data)
-        && isValidTrainerIdentityTexts(data)
-        && isValidTrainerSectionTexts(data)
-        && isValidTrainerClosingTexts(data)
-        && isValidTrainerLists(data)
-        && isValidTrainerLayout(data);
     }
 
     function isValidPublicAsset(data) {

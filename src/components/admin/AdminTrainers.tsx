@@ -24,6 +24,7 @@ import {
   DEFAULT_PROGRAM,
   DEFAULT_TRAINER_SECTION_ORDER,
   DEFAULT_TRAINER_SECTION_VISIBILITY,
+  OFFICIAL_PRIMARY_TRAINER_PHOTO,
 } from '../../lib/defaults';
 import {
   deleteTrainerProfile,
@@ -159,11 +160,17 @@ function formatTrainerError(err: unknown, fallback: string): string {
   const raw = err instanceof Error ? err.message : '';
   if (!raw) return fallback;
   try {
-    const parsed = JSON.parse(raw) as { error?: string; path?: string; operationType?: string };
+    const parsed = JSON.parse(raw) as {
+      error?: string;
+      path?: string;
+      operationType?: string;
+      authInfo?: { email?: string | null; emailVerified?: boolean | null };
+    };
     const inner = (parsed.error || '').toLowerCase();
     const loc = parsed.path ? ` (${parsed.operationType || 'write'} ${parsed.path})` : '';
+    const who = parsed.authInfo?.email ? ` [Akun: ${parsed.authInfo.email}]` : '';
     if (inner.includes('permission') || inner.includes('insufficient')) {
-      return `Izin penulisan ke database ditolak${loc}. Pastikan Anda login dengan akun admin terverifikasi lalu muat ulang halaman.`;
+      return `Izin penulisan ke database ditolak${loc}${who}. Pastikan Anda login dengan akun admin terverifikasi lalu muat ulang halaman.`;
     }
     if (inner.includes('quota')) {
       return 'Kuota harian database tercapai. Silakan coba lagi besok atau periksa kuota Firebase.';
@@ -580,6 +587,23 @@ export function AdminTrainers({ trainers, activeProgram }: AdminTrainersProps) {
                           }}
                         />
                       </label>
+
+                      {draft.id === DEFAULT_PRIMARY_TRAINER.id &&
+                        draft.photoUrl !== OFFICIAL_PRIMARY_TRAINER_PHOTO && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                photoUrl: OFFICIAL_PRIMARY_TRAINER_PHOTO,
+                              }))
+                            }
+                            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            <span>Gunakan Foto Resmi Pemateri</span>
+                          </button>
+                        )}
 
                       {draft.photoUrl && (
                         <button
